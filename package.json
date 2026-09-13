@@ -1,0 +1,13 @@
+{
+  "name": "nhapmuoc-attendance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hệ thống chấm công nội bộ bằng Node.js",
+  "scripts": {
+    "start": "node attendance_server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
