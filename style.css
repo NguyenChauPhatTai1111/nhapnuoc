@@ -1079,6 +1079,17 @@ table {
 }
 
 /* Màn hình đăng nhập nhẹ chạy hoàn toàn trên trình duyệt. */
+dialog input[type=number] {
+  appearance: textfield;
+  -moz-appearance: textfield
+}
+
+dialog input[type=number]::-webkit-inner-spin-button,
+dialog input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0
+}
+
 body.auth-locked>header,
 body.auth-locked>main,
 body.auth-locked>footer,

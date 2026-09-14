@@ -67,6 +67,7 @@ function nextAvailableHouseholdId(households, records = {}) {
   return String(id);
 }
 function readingDefaults(previous, current) { const old = previous ?? 0; return { previous: old, current: current ?? old }; }
+function stripLeadingZeros(value) { return String(value).replace(/^0+(?=\d)/, ''); }
 function normalizeState(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Dữ liệu sao lưu không hợp lệ.');
   const households = { ...(value.households ?? defaultHouseholds()) };
@@ -129,11 +130,23 @@ function validateRecords(records) {
   }
   return records;
 }
-if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, WEEK };
+if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, WEEK };
 if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent = 'THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent = 'Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
   const $ = id => document.getElementById(id);
+  const isEditorNumber = element => element instanceof HTMLInputElement && element.type === 'number' && $('editor').contains(element);
+  document.addEventListener('focusin', event => {
+    if (isEditorNumber(event.target) && event.target.value === '0') event.target.select();
+  });
+  document.addEventListener('input', event => {
+    if (!isEditorNumber(event.target)) return;
+    const normalized = stripLeadingZeros(event.target.value);
+    if (normalized !== event.target.value) event.target.value = normalized;
+  });
+  document.addEventListener('wheel', event => {
+    if (isEditorNumber(event.target)) event.target.blur();
+  }, { capture: true, passive: true });
   const fmt = n => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(n);
   const append = (parent, tag, text, className) => {
     const element = document.createElement(tag);
