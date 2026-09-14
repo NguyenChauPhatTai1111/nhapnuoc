@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate } = require('./app');
+const { defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, buildPrintReport } = require('./app');
 
 test('form của hộ mới bắt đầu từ 0, không dùng chỉ số hộ trước', () => {
   assert.deepEqual(readingDefaults(undefined, undefined), { previous: 0, current: 0 });
@@ -36,4 +36,33 @@ test('phân trang giới hạn số hộ và tự giữ trang hợp lệ', () =>
   const last = paginate(ids, 99, 10);
   assert.equal(last.page, 3);
   assert.deepEqual(last.items, ids.slice(20));
+});
+
+test('báo cáo in chỉ lấy hộ đã ghi chỉ số và tách rõ hộ đang nợ', () => {
+  const state = {
+    households: {
+      '1': { name: 'Nguyễn Văn An', active: true },
+      '2': { name: 'Trần Thị Bình', active: true },
+      '3': { name: 'Hộ đã lưu trữ', active: false }
+    },
+    records: {
+      '2026-08': { '1': { previous: 10, current: 15, debt: 0, note: '' } },
+      '2026-09': {
+        '1': { previous: 15, current: 21.5, debt: 120000, note: 'Nợ tháng trước' },
+        '3': { previous: 4, current: 7, debt: 0, note: '' }
+      }
+    }
+  };
+  const report = buildPrintReport(state, '2026-09');
+  assert.equal(report.total, 2);
+  assert.equal(report.recorded, 2);
+  assert.equal(report.paid, 1);
+  assert.equal(report.owing, 1);
+  assert.equal(report.consumption, 9.5);
+  assert.equal(report.debt, 120000);
+  assert.deepEqual(report.rows.map(row => row.id), ['001', '003']);
+  assert.equal(report.rows[0].previous, 15);
+  assert.equal(report.rows[0].status, 'Đang nợ');
+  assert.equal(report.rows[1].status, 'Đã ghi chỉ số');
+  assert.equal(buildPrintReport(state, '2026-10').total, 0);
 });

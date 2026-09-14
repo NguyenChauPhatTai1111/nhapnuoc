@@ -125,6 +125,32 @@ function coveredRecord(records, month, id) {
   return null;
 }
 function periodLabel(start, end) { return start === end ? end : `${start} → ${end}`; }
+function buildPrintReport(state, month) {
+  if (!state || !monthValid(month)) throw Error('Tháng in không hợp lệ.');
+  const ids = Object.keys(state.households)
+    .filter(id => Boolean(coveredRecord(state.records, month, id)))
+    .sort((a, b) => a - b);
+  let owing = 0, consumption = 0, debt = 0;
+  const rows = ids.map((id, index) => {
+    const found = coveredRecord(state.records, month, id), record = found.record, end = found.end;
+    const previous = baseline(state.records, end, id), used = record.current - previous;
+    consumption += used; debt += record.debt || 0;
+    if (record.debt > 0) owing++;
+    return {
+      number: index + 1,
+      id: String(id).padStart(3, '0'),
+      name: state.households[id]?.name ?? `Hộ dân ${String(id).padStart(3, '0')}`,
+      period: record ? periodLabel(record.startMonth ?? end, end) : month,
+      previous,
+      current: record.current,
+      consumption: used,
+      debt: record.debt || 0,
+      note: record.note || '',
+      status: record.debt > 0 ? 'Đang nợ' : 'Đã ghi chỉ số'
+    };
+  });
+  return { rows, total: rows.length, recorded: rows.length, owing, paid: rows.length - owing, consumption, debt };
+}
 function validateRecords(records) {
   if (!records || typeof records !== 'object' || Array.isArray(records)) throw Error('Dữ liệu sao lưu không hợp lệ.');
   if (Object.keys(records).length > 1200) throw Error('Dữ liệu vượt quá giới hạn an toàn 1.200 tháng.');
@@ -152,7 +178,7 @@ function validateRecords(records) {
   }
   return records;
 }
-if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, WEEK };
+if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, buildPrintReport, WEEK };
 if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent = 'THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent = 'Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
@@ -579,6 +605,38 @@ if (typeof document !== 'undefined') {
     a.href = url; a.download = 'so-nuoc-tat-ca-thang.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('Đã xuất Excel tất cả tháng đã ghi.');
   };
+  $('print').onclick = () => {
+    if (!ready) return;
+    const month = $('month').value;
+    if (!monthValid(month)) { toast('Vui lòng chọn tháng hợp lệ trước khi in.'); return; }
+    const report = buildPrintReport(state, month), fragment = document.createDocumentFragment();
+    if (report.total === 0) { toast(`Tháng ${monthDisplay(month)} chưa có hộ nào đã ghi chỉ số để in.`); return; }
+    for (const row of report.rows) {
+      const tr = document.createElement('tr');
+      append(tr, 'td', row.number); append(tr, 'td', row.id); append(tr, 'td', row.name);
+      append(tr, 'td', row.period.split(' → ').map(monthDisplay).join(' → '));
+      append(tr, 'td', row.previous === null ? '—' : fmt(row.previous));
+      append(tr, 'td', row.current === null ? '—' : fmt(row.current));
+      append(tr, 'td', row.consumption === null ? '—' : fmt(row.consumption));
+      const debtText = row.debt > 0 ? `${fmt(row.debt)} đ${row.note ? ` · ${row.note}` : ''}` : row.note || '—';
+      append(tr, 'td', debtText); append(tr, 'td', row.status);
+      fragment.append(tr);
+    }
+    $('print-rows').replaceChildren(fragment);
+    $('print-title').textContent = `BẢNG CHỈ SỐ NƯỚC THÁNG ${monthDisplay(month)}`;
+    $('print-period').textContent = `Tháng đối chiếu: ${monthDisplay(month)}`;
+    $('print-created').textContent = `In lúc: ${new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())}`;
+    const summary = [
+      ['Số hộ được in', report.total], ['Đã ghi / không nợ', report.paid], ['Đang nợ', report.owing],
+      ['Tổng tiêu thụ', `${fmt(report.consumption)} m³`], ['Tổng công nợ', `${fmt(report.debt)} đ`]
+    ];
+    $('print-summary').replaceChildren(...summary.map(([label, value]) => {
+      const item = document.createElement('div'); append(item, 'span', label); append(item, 'strong', value); return item;
+    }));
+    document.title = `Sổ nước tháng ${monthDisplay(month)}`;
+    window.print();
+  };
+  window.addEventListener('afterprint', () => { document.title = 'Sổ nước • Quản lý nước sinh hoạt'; });
   $('export').onclick = () => {
     if (!ready) return;
     checkExpiry(); const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });

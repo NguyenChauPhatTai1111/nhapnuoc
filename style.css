@@ -128,6 +128,18 @@ p {
   flex-shrink: 0
 }
 
+.print-action {
+  color: white;
+  border-color: #147966;
+  background: #147966
+}
+
+.print-action:hover {
+  color: white;
+  border-color: #0f6757;
+  background: #0f6757
+}
+
 .notice {
   display: flex;
   gap: 15px;
@@ -396,9 +408,189 @@ footer span {
   margin: 0 10px
 }
 
+.print-report {
+  display: none
+}
+
 #empty {
   text-align: center;
   padding: 35px
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm
+  }
+
+  :root,
+  body {
+    color: #111;
+    background: #fff
+  }
+
+  body>*:not(.print-report) {
+    display: none !important
+  }
+
+  .print-report {
+    display: block;
+    font-family: Arial, "Segoe UI", sans-serif;
+    font-size: 9pt;
+    color: #111
+  }
+
+  .print-report-header {
+    height: auto;
+    padding: 0 0 4mm;
+    border: 0;
+    border-bottom: 1.5pt solid #111;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8mm
+  }
+
+  .print-report p {
+    color: #111;
+    line-height: 1.35
+  }
+
+  .print-kicker {
+    margin: 0 0 1.5mm;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 1pt
+  }
+
+  .print-report h1 {
+    margin: 0;
+    font-size: 16pt;
+    letter-spacing: 0
+  }
+
+  .print-meta {
+    text-align: right;
+    white-space: nowrap
+  }
+
+  .print-meta p {
+    margin: 0;
+    font-size: 8pt
+  }
+
+  .print-summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border: 1pt solid #333;
+    border-right: 0;
+    margin: 4mm 0
+  }
+
+  .print-summary div {
+    padding: 2mm 2.5mm;
+    border-right: 1pt solid #333
+  }
+
+  .print-summary span,
+  .print-summary strong {
+    display: block
+  }
+
+  .print-summary span {
+    margin-bottom: .8mm;
+    font-size: 7.5pt
+  }
+
+  .print-summary strong {
+    font-size: 10pt
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    white-space: normal
+  }
+
+  .print-table thead {
+    display: table-header-group
+  }
+
+  .print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid
+  }
+
+  .print-table th,
+  .print-table td {
+    position: static;
+    padding: 1.5mm 1.3mm;
+    border: .75pt solid #333;
+    background: #fff;
+    color: #111;
+    font-size: 7.5pt;
+    line-height: 1.25;
+    vertical-align: top;
+    overflow-wrap: anywhere
+  }
+
+  .print-table th {
+    background: #e9e9e9 !important;
+    font-size: 7pt;
+    font-weight: 700;
+    text-align: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact
+  }
+
+  .print-table th:nth-child(1) { width: 4% }
+  .print-table th:nth-child(2) { width: 6% }
+  .print-table th:nth-child(3) { width: 17% }
+  .print-table th:nth-child(4) { width: 12% }
+  .print-table th:nth-child(5),
+  .print-table th:nth-child(6),
+  .print-table th:nth-child(7) { width: 9% }
+  .print-table th:nth-child(8) { width: 24% }
+  .print-table th:nth-child(9) { width: 10% }
+
+  .print-table td:nth-child(1),
+  .print-table td:nth-child(2),
+  .print-table td:nth-child(4),
+  .print-table td:nth-child(5),
+  .print-table td:nth-child(6),
+  .print-table td:nth-child(7),
+  .print-table td:nth-child(9) {
+    text-align: center
+  }
+
+  .print-signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 35mm;
+    margin-top: 7mm;
+    text-align: center;
+    break-inside: avoid;
+    page-break-inside: avoid
+  }
+
+  .print-signatures p {
+    margin: 0;
+    font-weight: 700
+  }
+
+  .print-signatures span {
+    display: block;
+    margin-top: 1mm;
+    font-size: 7.5pt;
+    font-style: italic
+  }
+
+  .print-footnote {
+    margin: 18mm 0 0;
+    font-size: 7.5pt;
+    font-style: italic
+  }
 }
 
 dialog {
@@ -494,7 +686,7 @@ input:read-only {
   max-width: 90%
 }
 
-@media(max-width:800px) {
+@media screen and (max-width:800px) {
   header {
     padding: 0 20px;
     height: 70px
@@ -574,7 +766,7 @@ input:read-only {
   }
 }
 
-@media(max-width:480px) {
+@media screen and (max-width:480px) {
   .stats {
     grid-template-columns: 1fr
   }
@@ -670,7 +862,7 @@ table {
   color: #9a4032
 }
 
-@media(max-width:480px) {
+@media screen and (max-width:480px) {
   .account {
     gap: 7px
   }
@@ -915,7 +1107,7 @@ table {
 
 /* On phones, each household becomes a readable card so the action never sits
    outside the viewport at the far end of a wide desktop table. */
-@media(max-width:700px) {
+@media screen and (max-width:700px) {
   main {
     padding: 20px 10px
   }
@@ -1180,7 +1372,7 @@ table {
   }
 }
 
-@media(max-width:420px) {
+@media screen and (max-width:420px) {
   .actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1516,7 +1708,7 @@ body.auth-locked>#toast {
   color: #36a68c
 }
 
-@media(max-width:850px) {
+@media screen and (max-width:850px) {
   .login-screen {
     grid-template-columns: 1fr
   }
@@ -1556,7 +1748,7 @@ body.auth-locked>#toast {
   }
 }
 
-@media(max-width:440px) {
+@media screen and (max-width:440px) {
   .login-welcome {
     min-height: 285px;
     padding: 24px

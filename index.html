@@ -54,7 +54,8 @@
                 <h1>Mỗi chỉ số, rõ ràng hơn.</h1>
                 <p>Quản lý chỉ số đồng hồ và lượng nước sử dụng của 200 hộ dân.</p>
             </div>
-            <div class="actions"><button id="excel">↓ Xuất Excel</button><button id="export">↓ Xuất sao
+            <div class="actions"><button id="print" class="print-action">▣ In sổ tháng</button><button id="excel">↓ Xuất
+                    Excel</button><button id="export">↓ Xuất sao
                     lưu</button><button id="import">↑ Nhập sao lưu</button><input id="file" type="file"
                     accept="application/json,.json" hidden></div>
         </section>
@@ -112,6 +113,45 @@
         </section>
         <footer>Sổ nước <span>•</span> Dữ liệu lưu trong trình duyệt, không đồng bộ giữa các thiết bị.</footer>
     </main>
+    <section id="print-report" class="print-report" aria-hidden="true">
+        <header class="print-report-header">
+            <div>
+                <p class="print-kicker">SỔ THEO DÕI NƯỚC SINH HOẠT</p>
+                <h1 id="print-title">BẢNG CHỈ SỐ NƯỚC</h1>
+            </div>
+            <div class="print-meta">
+                <p id="print-period"></p>
+                <p id="print-created"></p>
+            </div>
+        </header>
+        <div id="print-summary" class="print-summary"></div>
+        <table class="print-table">
+            <thead>
+                <tr>
+                    <th>STT</th>
+                    <th>MÃ HỘ</th>
+                    <th>HỘ DÂN</th>
+                    <th>KỲ GHI</th>
+                    <th>CHỈ SỐ CŨ</th>
+                    <th>CHỈ SỐ MỚI</th>
+                    <th>TIÊU THỤ (m³)</th>
+                    <th>CÔNG NỢ / GHI CHÚ</th>
+                    <th>TRẠNG THÁI</th>
+                </tr>
+            </thead>
+            <tbody id="print-rows"></tbody>
+        </table>
+        <div class="print-signatures">
+            <div>
+                <p>Người lập bảng</p><span>(Ký, ghi rõ họ tên)</span>
+            </div>
+            <div>
+                <p>Người kiểm tra</p><span>(Ký, ghi rõ họ tên)</span>
+            </div>
+        </div>
+        <p class="print-footnote">Bản in chỉ gồm các hộ đã ghi chỉ số trong tháng đối chiếu; hộ đang nợ được ghi rõ tại
+            cột trạng thái.</p>
+    </section>
     <dialog id="editor">
         <form id="edit-form">
             <div class="dialog-heading">
