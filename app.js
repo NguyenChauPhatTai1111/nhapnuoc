@@ -209,6 +209,46 @@ function buildPrintReport(state, month) {
   });
   return { rows, total: rows.length, recorded: rows.length, owing, paid: rows.length - owing, consumption, debt };
 }
+function stateToSupabaseRows(state) {
+  const households = Object.entries(state.households).map(([id, household]) => ({
+    household_id: id,
+    household_name: household.name,
+    active: household.active
+  }));
+  const readings = [];
+  for (const [period, houses] of Object.entries(state.records)) {
+    const [year, month] = period.split('-').map(Number);
+    for (const [id, record] of Object.entries(houses)) readings.push({
+      household_id: id,
+      reading_year: year,
+      reading_month: month,
+      previous_reading: record.previous,
+      current_reading: record.current,
+      start_period: record.startMonth ?? '',
+      debt_amount: record.debt || 0,
+      note: record.note || ''
+    });
+  }
+  return { households, readings };
+}
+function supabaseRowsToState(householdRows, readingRows, updatedAt = 0) {
+  const households = {}, records = {};
+  for (const row of householdRows) households[String(row.household_id)] = { name: row.household_name, active: row.active };
+  for (const row of readingRows) {
+    const period = `${row.reading_year}-${String(row.reading_month).padStart(2, '0')}`;
+    const previous = Number(row.previous_reading), current = Number(row.current_reading);
+    if (row.consumption !== undefined && Math.abs(Number(row.consumption) - (current - previous)) > 0.001) throw Error(`Mức tiêu thụ hộ ${row.household_id}, tháng ${period} không khớp chỉ số.`);
+    records[period] ??= {};
+    records[period][String(row.household_id)] = {
+      previous,
+      current,
+      debt: Number(row.debt_amount || 0),
+      note: row.note || '',
+      ...(row.start_period && row.start_period !== period ? { startMonth: row.start_period } : {})
+    };
+  }
+  return normalizeState({ version: 1, resetAt: Date.now() + WEEK, updatedAt, households, records });
+}
 function validateRecords(records) {
   if (!records || typeof records !== 'object' || Array.isArray(records)) throw Error('Dữ liệu sao lưu không hợp lệ.');
   if (Object.keys(records).length > 1200) throw Error('Dữ liệu vượt quá giới hạn an toàn 1.200 tháng.');
@@ -236,7 +276,7 @@ function validateRecords(records) {
   }
   return records;
 }
-if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, buildPrintReport, WEEK };
+if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, buildPrintReport, stateToSupabaseRows, supabaseRowsToState, WEEK };
 if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent = 'THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent = 'Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
@@ -363,21 +403,12 @@ if (typeof document !== 'undefined') {
     return { result, session };
   }
   async function uploadSupabaseState(value) {
-    const session = await cloud.activeSession();
-    const response = await fetch(`${cloud.config.url}/rest/v1/water_app_state?on_conflict=user_id`, {
+    const { households, readings } = stateToSupabaseRows(value);
+    const { result } = await supabaseDataRequest('rpc/sync_water_data', {
       method: 'POST',
-      headers: {
-        apikey: cloud.config.publishableKey,
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=minimal'
-      },
-      body: JSON.stringify({ user_id: session.user.id, state: canonicalState(value), updated_at: new Date(value.updatedAt ?? Date.now()).toISOString() })
+      body: JSON.stringify({ p_households: households, p_readings: readings })
     });
-    if (!response.ok) {
-      const result = await response.json().catch(() => null);
-      throw Error(result?.message || `Không lưu được lên Supabase (${response.status}).`);
-    }
+    return result;
   }
   async function saveLocalCopy(before, next) {
     if (storageMode === 'indexeddb') await writeDatabaseState(database, before, next);
@@ -390,19 +421,27 @@ if (typeof document !== 'undefined') {
   async function connectRemoteStorage() {
     if (!cloud.enabled || !cloud.getSession?.() || !state) return false;
     try {
-      const session = await cloud.activeSession();
-      const { result: rows } = await supabaseDataRequest(`water_app_state?select=state,updated_at&user_id=eq.${encodeURIComponent(session.user.id)}`);
-      const row = rows?.[0];
-      if (!row) await uploadSupabaseState(state);
-      else {
-        const remote = normalizeState(row.state);
+      const [{ result: households }, { result: readings }] = await Promise.all([
+        supabaseDataRequest('water_households?select=household_id,household_name,active,updated_at&order=household_id'),
+        supabaseDataRequest('water_readings?select=household_id,reading_year,reading_month,previous_reading,current_reading,consumption,start_period,debt_amount,note,updated_at&order=reading_year,reading_month,household_id')
+      ]);
+      if (!households?.length) {
+        const { result: legacyRows } = await supabaseDataRequest('water_app_state?select=state,updated_at&limit=1').catch(() => ({ result: [] }));
+        if (legacyRows?.[0]?.state) {
+          const legacy = normalizeState(legacyRows[0].state);
+          validateHouseholds(legacy.households); validateRecords(legacy.records);
+          state = { ...legacy, updatedAt: Date.parse(legacyRows[0].updated_at) || Date.now() };
+        }
+        await uploadSupabaseState(state);
+      } else {
+        const timestamps = [...households, ...readings].map(row => Date.parse(row.updated_at) || 0);
+        const remoteTime = Math.max(0, ...timestamps);
+        const remote = supabaseRowsToState(households, readings, remoteTime);
         validateHouseholds(remote.households); validateRecords(remote.records);
-        const remoteTime = remote.updatedAt ?? Date.parse(row.updated_at) ?? 0;
-        const localTime = state.updatedAt ?? 0;
-        if (localTime > remoteTime) await uploadSupabaseState(state);
+        if ((state.updatedAt ?? 0) > remoteTime) await uploadSupabaseState(state);
         else if (JSON.stringify(canonicalState(remote)) !== JSON.stringify(canonicalState(state))) {
           const before = state;
-          state = { ...remote, updatedAt: remoteTime };
+          state = remote;
           await saveLocalCopy(before, state);
         }
       }

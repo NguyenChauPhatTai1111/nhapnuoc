@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, buildPrintReport } = require('./app');
+const { defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, buildPrintReport, stateToSupabaseRows, supabaseRowsToState } = require('./app');
 
 test('form của hộ mới bắt đầu từ 0, không dùng chỉ số hộ trước', () => {
   assert.deepEqual(readingDefaults(undefined, undefined), { previous: 0, current: 0 });
@@ -65,4 +65,27 @@ test('báo cáo in chỉ lấy hộ đã ghi chỉ số và tách rõ hộ đang
   assert.equal(report.rows[0].status, 'Đang nợ');
   assert.equal(report.rows[1].status, 'Đã ghi chỉ số');
   assert.equal(buildPrintReport(state, '2026-10').total, 0);
+});
+
+test('Supabase lưu mỗi hộ và chỉ số từng tháng thành dòng riêng', () => {
+  const source = {
+    households: { '1': { name: 'Nguyễn Văn An', active: true }, '2': { name: 'Trần Thị Bình', active: false } },
+    records: {
+      '2026-08': { '1': { previous: 10, current: 14, debt: 0, note: '' } },
+      '2026-09': { '1': { previous: 14, current: 20.5, debt: 150000, note: 'Còn nợ' } }
+    }
+  };
+  const rows = stateToSupabaseRows(source);
+  assert.equal(rows.households.length, 2);
+  assert.equal(rows.readings.length, 2);
+  assert.deepEqual(rows.readings[1], {
+    household_id: '1', reading_year: 2026, reading_month: 9,
+    previous_reading: 14, current_reading: 20.5, start_period: '',
+    debt_amount: 150000, note: 'Còn nợ'
+  });
+  const restored = supabaseRowsToState(rows.households, rows.readings.map(row => ({ ...row, consumption: row.current_reading - row.previous_reading })), 123);
+  assert.equal(restored.records['2026-09']['1'].previous, 14);
+  assert.equal(restored.records['2026-09']['1'].current, 20.5);
+  assert.equal(restored.records['2026-09']['1'].current - restored.records['2026-09']['1'].previous, 6.5);
+  assert.equal(restored.updatedAt, 123);
 });
