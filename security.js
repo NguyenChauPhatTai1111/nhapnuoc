@@ -3,7 +3,7 @@
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
-  "connect-src 'none'",
+  "connect-src 'self' https://*.supabase.co",
   "font-src 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",

@@ -4,9 +4,9 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {CONTENT_SECURITY_POLICY,SECURITY_HEADERS,createRateLimiter}=require('./security');
 
-test('CSP khóa script, iframe, kết nối mạng và Trusted Types',()=>{
+test('CSP chỉ cho phép kết nối Supabase và tài nguyên cùng nguồn',()=>{
   assert.match(CONTENT_SECURITY_POLICY,/script-src 'self'/);
-  assert.match(CONTENT_SECURITY_POLICY,/connect-src 'none'/);
+  assert.match(CONTENT_SECURITY_POLICY,/connect-src 'self' https:\/\/\*\.supabase\.co/);
   assert.match(CONTENT_SECURITY_POLICY,/frame-ancestors 'none'/);
   assert.match(CONTENT_SECURITY_POLICY,/trusted-types 'none'/);
   assert.equal(SECURITY_HEADERS['X-Content-Type-Options'],'nosniff');

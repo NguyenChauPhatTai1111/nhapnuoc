@@ -1,6 +1,9 @@
 'use strict';
 if (typeof document !== 'undefined') {
 const AUTH_KEY = 'so-nuoc-admin-auth';
+const SUPABASE_SESSION_KEY = 'so-nuoc-supabase-session';
+const SUPABASE_CONFIG = window.SUPABASE_CONFIG ?? {};
+const supabaseEnabled = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(SUPABASE_CONFIG.url ?? '') && typeof SUPABASE_CONFIG.publishableKey === 'string' && SUPABASE_CONFIG.publishableKey.length > 20;
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
 const loginUsername = document.getElementById('login-username');
@@ -15,19 +18,69 @@ async function authDigest(username, password) {
 }
 
 function authStored() {
-  try { return sessionStorage.getItem(AUTH_KEY) === 'yes'; } catch { return false; }
+  try {
+    if (!supabaseEnabled) return sessionStorage.getItem(AUTH_KEY) === 'yes';
+    const session = JSON.parse(localStorage.getItem(SUPABASE_SESSION_KEY) || 'null');
+    return Boolean(session?.access_token && session?.refresh_token && session?.user?.id);
+  } catch { return false; }
 }
+function storedSupabaseSession() {
+  try { return JSON.parse(localStorage.getItem(SUPABASE_SESSION_KEY) || 'null'); } catch { return null; }
+}
+function saveSupabaseSession(session) {
+  localStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_at: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
+    user: { id: session.user.id, email: session.user.email }
+  }));
+}
+async function supabaseAuthRequest(path, body) {
+  const response = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_CONFIG.publishableKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw Error(result.msg || result.error_description || result.message || 'Không kết nối được Supabase.');
+  return result;
+}
+async function activeSupabaseSession() {
+  let session = storedSupabaseSession();
+  if (!session) throw Error('Phiên đăng nhập đã hết hạn.');
+  if ((session.expires_at ?? 0) <= Math.floor(Date.now() / 1000) + 60) {
+    session = await supabaseAuthRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+    saveSupabaseSession(session);
+  }
+  return session;
+}
+window.soNuocSupabase = { enabled: supabaseEnabled, config: SUPABASE_CONFIG, activeSession: activeSupabaseSession, getSession: storedSupabaseSession, onAuthenticated: null };
 function setAuthenticated(authenticated) {
   document.body.classList.toggle('auth-locked', !authenticated);
   loginScreen.hidden = authenticated;
   if (!authenticated) requestAnimationFrame(() => loginUsername.focus());
 }
 setAuthenticated(authStored());
+if (supabaseEnabled) {
+  loginUsername.type = 'email';
+  loginUsername.placeholder = 'Nhập email quản trị';
+  loginUsername.previousElementSibling?.remove();
+  document.querySelector('label[for="login-username"]').textContent = 'Email đăng nhập';
+}
 loginForm.addEventListener('submit', async event => {
   event.preventDefault();
   const submitButton = loginForm.querySelector('[type="submit"]');
   submitButton.disabled = true;
   try {
+    if (supabaseEnabled) {
+      const session = await supabaseAuthRequest('token?grant_type=password', { email: loginUsername.value.trim(), password: loginPassword.value });
+      saveSupabaseSession(session);
+      loginError.hidden = true;
+      loginPassword.value = '';
+      setAuthenticated(true);
+      await window.soNuocSupabase.onAuthenticated?.();
+      return;
+    }
     if (await authDigest(loginUsername.value.trim(), loginPassword.value) === AUTH_DIGEST) {
       try { sessionStorage.setItem(AUTH_KEY, 'yes'); } catch { }
       loginError.hidden = true;
@@ -38,8 +91,8 @@ loginForm.addEventListener('submit', async event => {
     loginError.textContent = 'Tên đăng nhập hoặc mật khẩu chưa đúng. Vui lòng thử lại.';
     loginError.hidden = false;
     loginPassword.select();
-  } catch {
-    loginError.textContent = 'Trình duyệt không hỗ trợ xác thực. Vui lòng cập nhật trình duyệt và thử lại.';
+  } catch (error) {
+    loginError.textContent = supabaseEnabled ? error.message : 'Trình duyệt không hỗ trợ xác thực. Vui lòng cập nhật trình duyệt và thử lại.';
     loginError.hidden = false;
   } finally {
     submitButton.disabled = false;
@@ -53,6 +106,11 @@ document.getElementById('toggle-password').addEventListener('click', event => {
 });
 document.getElementById('logout').addEventListener('click', () => {
   try { sessionStorage.removeItem(AUTH_KEY); } catch { }
+  if (supabaseEnabled) {
+    const session = storedSupabaseSession();
+    if (session?.access_token) fetch(`${SUPABASE_CONFIG.url}/auth/v1/logout`, { method: 'POST', headers: { apikey: SUPABASE_CONFIG.publishableKey, Authorization: `Bearer ${session.access_token}` } }).catch(() => {});
+    try { localStorage.removeItem(SUPABASE_SESSION_KEY); } catch { }
+  }
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   loginForm.reset();
   loginError.hidden = true;
@@ -183,6 +241,7 @@ if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent = 'THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent = 'Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
   const $ = id => document.getElementById(id);
+  const cloud = window.soNuocSupabase ?? { enabled: false };
   const isEditorNumber = element => element instanceof HTMLInputElement && element.type === 'number' && $('editor').contains(element);
   document.addEventListener('focusin', event => {
     if (isEditorNumber(event.target) && event.target.value === '0') event.target.select();
@@ -225,7 +284,7 @@ if (typeof document !== 'undefined') {
   const householdDialog = $('household-dialog');
   previousLabel.hidden = true; previousHint.hidden = true; currentLabel.hidden = true; $('previous').required = false; $('current').required = false;
   periodHint.textContent = 'Chọn 2 hoặc 3 tháng. Mỗi tháng có chỉ số cũ và chỉ số mới riêng; chỉ số cũ của tháng sau tự lấy từ chỉ số mới tháng trước.';
-  let state, database = null, storageMode = 'indexeddb', ready = false, saving = false, editing = null, householdEditing = null, toastTimer, multiEntry = false, currentPage = 1, actionsVisible = false;
+  let state, database = null, storageMode = 'indexeddb', remoteStorage = false, ready = false, saving = false, editing = null, householdEditing = null, toastTimer, multiEntry = false, currentPage = 1, actionsVisible = false;
   const mobileList = matchMedia('(max-width:700px)');
   const fresh = () => ({ version: 1, resetAt: Date.now() + WEEK, households: defaultHouseholds(), records: {} });
   function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 5500); }
@@ -288,6 +347,76 @@ if (typeof document !== 'undefined') {
     if (value.version !== 1 || !Number.isFinite(value.resetAt)) throw Error('Dữ liệu localStorage không hợp lệ.');
     validateHouseholds(value.households); validateRecords(value.records); return value;
   }
+  async function supabaseDataRequest(path, options = {}) {
+    const session = await cloud.activeSession();
+    const response = await fetch(`${cloud.config.url}/rest/v1/${path}`, {
+      ...options,
+      headers: {
+        apikey: cloud.config.publishableKey,
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw Error(result?.message || `Supabase phản hồi lỗi ${response.status}.`);
+    return { result, session };
+  }
+  async function uploadSupabaseState(value) {
+    const session = await cloud.activeSession();
+    const response = await fetch(`${cloud.config.url}/rest/v1/water_app_state?on_conflict=user_id`, {
+      method: 'POST',
+      headers: {
+        apikey: cloud.config.publishableKey,
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ user_id: session.user.id, state: canonicalState(value), updated_at: new Date(value.updatedAt ?? Date.now()).toISOString() })
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw Error(result?.message || `Không lưu được lên Supabase (${response.status}).`);
+    }
+  }
+  async function saveLocalCopy(before, next) {
+    if (storageMode === 'indexeddb') await writeDatabaseState(database, before, next);
+    else {
+      const original = localStorage.getItem(KEY);
+      if (original && localStorage.getItem(PRE_IDB_BACKUP_KEY) === null) localStorage.setItem(PRE_IDB_BACKUP_KEY, original);
+      localStorage.setItem(KEY, JSON.stringify(next));
+    }
+  }
+  async function connectRemoteStorage() {
+    if (!cloud.enabled || !cloud.getSession?.() || !state) return false;
+    try {
+      const session = await cloud.activeSession();
+      const { result: rows } = await supabaseDataRequest(`water_app_state?select=state,updated_at&user_id=eq.${encodeURIComponent(session.user.id)}`);
+      const row = rows?.[0];
+      if (!row) await uploadSupabaseState(state);
+      else {
+        const remote = normalizeState(row.state);
+        validateHouseholds(remote.households); validateRecords(remote.records);
+        const remoteTime = remote.updatedAt ?? Date.parse(row.updated_at) ?? 0;
+        const localTime = state.updatedAt ?? 0;
+        if (localTime > remoteTime) await uploadSupabaseState(state);
+        else if (JSON.stringify(canonicalState(remote)) !== JSON.stringify(canonicalState(state))) {
+          const before = state;
+          state = { ...remote, updatedAt: remoteTime };
+          await saveLocalCopy(before, state);
+        }
+      }
+      remoteStorage = true;
+      document.querySelector('.local').textContent = '● Đã đồng bộ Supabase';
+      if (ready) render();
+      return true;
+    } catch (error) {
+      remoteStorage = false;
+      console.error('Không đồng bộ được Supabase:', error);
+      if (ready) toast('Chưa đồng bộ được Supabase; dữ liệu vẫn an toàn trên thiết bị này.');
+      return false;
+    }
+  }
   async function initializeStorage() {
     let localState = null, localError = null, migrated = false;
     try { localState = readLocalState(); } catch (err) { localError = err; }
@@ -318,6 +447,7 @@ if (typeof document !== 'undefined') {
     }
     ready = true;
     document.querySelector('.local').textContent = storageMode === 'indexeddb' ? '● Đã lưu bằng IndexedDB trên thiết bị' : '● Đang dùng localStorage dự phòng';
+    if (cloud.enabled && cloud.getSession?.()) await connectRemoteStorage();
     render();
     if (migrated) toast('Đã chuyển và xác minh dữ liệu sang IndexedDB. Bản localStorage cũ vẫn được giữ nguyên để dự phòng.');
     else if (localError) toast('Dữ liệu localStorage cũ không đọc được và vẫn được giữ nguyên; IndexedDB đang hoạt động với dữ liệu an toàn hiện có.');
@@ -327,18 +457,20 @@ if (typeof document !== 'undefined') {
     saving = true;
     try {
       const saved = { ...next, updatedAt: Date.now() };
-      if (storageMode === 'indexeddb') await writeDatabaseState(database, state, saved);
-      else {
-        const original = localStorage.getItem(KEY);
-        if (original && localStorage.getItem(PRE_IDB_BACKUP_KEY) === null) localStorage.setItem(PRE_IDB_BACKUP_KEY, original);
-        localStorage.setItem(KEY, JSON.stringify(saved));
+      await saveLocalCopy(state, saved);
+      state = saved;
+      if (cloud.enabled && cloud.getSession?.()) {
+        try { await uploadSupabaseState(saved); remoteStorage = true; document.querySelector('.local').textContent = '● Đã đồng bộ Supabase'; }
+        catch (error) { remoteStorage = false; console.error('Không lưu được lên Supabase:', error); toast('Đã lưu trên thiết bị nhưng chưa đồng bộ được Supabase.'); }
       }
-      state = saved; return true;
+      return true;
     } catch (err) {
       console.error('Không lưu được dữ liệu:', err);
       toast('Không lưu được dữ liệu. Dữ liệu đang hiển thị chưa bị thay đổi; vui lòng xuất bản sao lưu và thử lại.'); return false;
     } finally { saving = false; }
   }
+  if (cloud.enabled) cloud.onAuthenticated = connectRemoteStorage;
+  window.addEventListener('focus', () => { if (ready && !saving && cloud.enabled && cloud.getSession?.()) connectRemoteStorage(); });
   clearCacheButton.addEventListener('click', () => {
     if (!ready || saving) return;
     if (storageMode !== 'indexeddb') { toast('Không thể xóa localStorage vì hệ thống đang dùng nó làm nơi lưu dự phòng.'); return; }

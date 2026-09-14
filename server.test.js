@@ -19,6 +19,13 @@ test('server phục vụ file với security headers',()=>withServer(async origi
   assert.match(await response.text(),/<!doctype html>/i);
 }));
 
+test('server phục vụ tệp cấu hình Supabase cho trình duyệt',()=>withServer(async origin=>{
+  const response=await fetch(`${origin}/supabase-config.js`);
+  assert.equal(response.status,200);
+  assert.match(response.headers.get('content-type'),/text\/javascript/);
+  assert.match(await response.text(),/SUPABASE_CONFIG/);
+}));
+
 test('server chặn phương thức ghi và tài nguyên ngoài whitelist',()=>withServer(async origin=>{
   assert.equal((await fetch(`${origin}/`,{method:'POST'})).status,405);
   assert.equal((await fetch(`${origin}/package.json`)).status,404);
