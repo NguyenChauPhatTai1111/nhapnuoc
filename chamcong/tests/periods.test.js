@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {validateRecords,baseline,coveredRecord}=require('../app.js');
+const {validateRecords,baseline,coveredRecord}=require('../../app.js');
 const reading=(previous,current,startMonth)=>({previous,current,...(startMonth?{startMonth}:{})});
 test('Skipped September and October form one period and feed November',()=>{
  const records={'2026-08':{1:reading(80,100)},'2026-10':{1:reading(100,130,'2026-09')},'2026-11':{1:reading(130,140)}};
