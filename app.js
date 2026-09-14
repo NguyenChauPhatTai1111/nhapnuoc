@@ -6,6 +6,13 @@ const loginForm = document.getElementById('login-form');
 const loginUsername = document.getElementById('login-username');
 const loginPassword = document.getElementById('login-password');
 const loginError = document.getElementById('login-error');
+const AUTH_DIGEST = 'db420f3b3c05d2c947fca54462bbd21d12642d5e8359902c74ab9eb4800c518b';
+
+async function authDigest(username, password) {
+  const data = new TextEncoder().encode(`${username}\u0000${password}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 function authStored() {
   try { return sessionStorage.getItem(AUTH_KEY) === 'yes'; } catch { return false; }
@@ -16,18 +23,27 @@ function setAuthenticated(authenticated) {
   if (!authenticated) requestAnimationFrame(() => loginUsername.focus());
 }
 setAuthenticated(authStored());
-loginForm.addEventListener('submit', event => {
+loginForm.addEventListener('submit', async event => {
   event.preventDefault();
-  if (loginUsername.value.trim() === 'nhungnhung' && loginPassword.value === '123456') {
-    try { sessionStorage.setItem(AUTH_KEY, 'yes'); } catch { }
-    loginError.hidden = true;
-    loginPassword.value = '';
-    setAuthenticated(true);
-    return;
+  const submitButton = loginForm.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    if (await authDigest(loginUsername.value.trim(), loginPassword.value) === AUTH_DIGEST) {
+      try { sessionStorage.setItem(AUTH_KEY, 'yes'); } catch { }
+      loginError.hidden = true;
+      loginPassword.value = '';
+      setAuthenticated(true);
+      return;
+    }
+    loginError.textContent = 'Tên đăng nhập hoặc mật khẩu chưa đúng. Vui lòng thử lại.';
+    loginError.hidden = false;
+    loginPassword.select();
+  } catch {
+    loginError.textContent = 'Trình duyệt không hỗ trợ xác thực. Vui lòng cập nhật trình duyệt và thử lại.';
+    loginError.hidden = false;
+  } finally {
+    submitButton.disabled = false;
   }
-  loginError.textContent = 'Tên đăng nhập hoặc mật khẩu chưa đúng. Vui lòng thử lại.';
-  loginError.hidden = false;
-  loginPassword.select();
 });
 document.getElementById('toggle-password').addEventListener('click', event => {
   const showing = loginPassword.type === 'text';
@@ -68,6 +84,12 @@ function nextAvailableHouseholdId(households, records = {}) {
 }
 function readingDefaults(previous, current) { const old = previous ?? 0; return { previous: old, current: current ?? old }; }
 function stripLeadingZeros(value) { return String(value).replace(/^0+(?=\d)/, ''); }
+function paginate(items, requestedPage, pageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+  const start = (page - 1) * pageSize;
+  return { items: items.slice(start, start + pageSize), page, totalPages, start: items.length ? start + 1 : 0, end: Math.min(start + pageSize, items.length) };
+}
 function normalizeState(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Dữ liệu sao lưu không hợp lệ.');
   const households = { ...(value.households ?? defaultHouseholds()) };
@@ -130,7 +152,7 @@ function validateRecords(records) {
   }
   return records;
 }
-if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, WEEK };
+if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, WEEK };
 if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent = 'THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent = 'Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
@@ -165,10 +187,20 @@ if (typeof document !== 'undefined') {
   const addHouseholdButton = document.createElement('button');
   addHouseholdButton.type = 'button'; addHouseholdButton.className = 'add-household'; addHouseholdButton.textContent = '＋ Thêm hộ dân';
   $('count').before(addHouseholdButton);
+  const actionToggleButton = document.createElement('button');
+  actionToggleButton.type = 'button'; actionToggleButton.className = 'action-toggle'; actionToggleButton.textContent = 'Hiện thao tác'; actionToggleButton.setAttribute('aria-pressed', 'false');
+  addHouseholdButton.before(actionToggleButton);
+  const panel = document.querySelector('.panel'); panel.classList.add('actions-hidden');
+  const pagination = document.createElement('nav'); pagination.className = 'pagination'; pagination.setAttribute('aria-label', 'Phân trang danh sách hộ dân');
+  const previousPageButton = document.createElement('button'); previousPageButton.type = 'button'; previousPageButton.className = 'page-button'; previousPageButton.textContent = '← Trước';
+  const pageInfo = document.createElement('span'); pageInfo.className = 'page-info'; pageInfo.setAttribute('aria-live', 'polite');
+  const nextPageButton = document.createElement('button'); nextPageButton.type = 'button'; nextPageButton.className = 'page-button'; nextPageButton.textContent = 'Sau →';
+  pagination.append(previousPageButton, pageInfo, nextPageButton); document.querySelector('.panel-footer').before(pagination);
   const householdDialog = $('household-dialog');
   previousLabel.hidden = true; previousHint.hidden = true; currentLabel.hidden = true; $('previous').required = false; $('current').required = false;
   periodHint.textContent = 'Chọn 2 hoặc 3 tháng. Mỗi tháng có chỉ số cũ và chỉ số mới riêng; chỉ số cũ của tháng sau tự lấy từ chỉ số mới tháng trước.';
-  let state, database = null, storageMode = 'indexeddb', ready = false, saving = false, editing = null, householdEditing = null, toastTimer, multiEntry = false;
+  let state, database = null, storageMode = 'indexeddb', ready = false, saving = false, editing = null, householdEditing = null, toastTimer, multiEntry = false, currentPage = 1, actionsVisible = false;
+  const mobileList = matchMedia('(max-width:700px)');
   const fresh = () => ({ version: 1, resetAt: Date.now() + WEEK, households: defaultHouseholds(), records: {} });
   function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 5500); }
   const requestResult = request => new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -336,14 +368,20 @@ if (typeof document !== 'undefined') {
     $('total').replaceChildren(document.createTextNode(`${fmt(total)} `)); append($('total'), 'small', 'm³');
     $('total-note').textContent = `Tổng các kỳ kết thúc tháng ${month.split('-').reverse().join('/')}`;
 
-    const query = $('search').value.trim().replace(/^hộ\s*/i, ''); let shown = 0;
+    const query = $('search').value.trim().replace(/^hộ\s*/i, '');
     const fragment = document.createDocumentFragment();
     const displayIds = Object.keys(state.households).filter(id => state.households[id].active || coveredRecord(state.records, month, id)).sort((a, b) => a - b);
-    for (const id of displayIds) {
-      const label = String(id).padStart(3, '0'), household = state.households[id], name = householdName(id), found = coveredRecord(state.records, month, id), r = found?.record, end = found?.end ?? month, filter = $('filter').value;
-      if (query && !label.includes(query) && !name.toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi'))) continue;
-      if (filter === 'done' && !r || filter === 'pending' && r || filter === 'debt' && !(r?.debt > 0)) continue;
-      shown++; const prev = baseline(state.records, end, id);
+    const matchingIds = displayIds.filter(id => {
+      const label = String(id).padStart(3, '0'), name = householdName(id), record = coveredRecord(state.records, month, id)?.record, filter = $('filter').value;
+      if (query && !label.includes(query) && !name.toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi'))) return false;
+      if (filter === 'done' && !record || filter === 'pending' && record || filter === 'debt' && !(record?.debt > 0)) return false;
+      return true;
+    });
+    const pageResult = paginate(matchingIds, currentPage, mobileList.matches ? 10 : 25);
+    currentPage = pageResult.page;
+    for (const id of pageResult.items) {
+      const label = String(id).padStart(3, '0'), household = state.households[id], name = householdName(id), found = coveredRecord(state.records, month, id), r = found?.record, end = found?.end ?? month;
+      const prev = baseline(state.records, end, id);
       const customName = name !== `Hộ dân ${label}`, archived = !household.active;
       const row = document.createElement('tr'), identity = append(row, 'td'), icon = append(identity, 'span', '⌂', 'house'), identityText = append(identity, 'span', name);
       icon.setAttribute('aria-hidden', 'true');
@@ -360,9 +398,25 @@ if (typeof document !== 'undefined') {
       const archive = append(actions, 'button', archived ? 'Khôi phục hộ' : 'Xóa hộ', archived ? 'restore' : 'archive'); archive.type = 'button'; archive.dataset[archived ? 'restoreId' : 'archiveId'] = id;
       fragment.append(row);
     }
-    $('rows').replaceChildren(fragment); $('count').textContent = `Hiển thị ${shown} / ${displayIds.length} hộ`; $('empty').hidden = shown !== 0;
+    $('rows').replaceChildren(fragment);
+    $('count').textContent = matchingIds.length ? `Hộ ${pageResult.start}–${pageResult.end} / ${matchingIds.length}` : 'Không có hộ phù hợp';
+    $('empty').hidden = matchingIds.length !== 0;
+    pagination.hidden = matchingIds.length <= (mobileList.matches ? 10 : 25);
+    pageInfo.textContent = `Trang ${pageResult.page} / ${pageResult.totalPages}`;
+    previousPageButton.disabled = pageResult.page === 1;
+    nextPageButton.disabled = pageResult.page === pageResult.totalPages;
   }
-  ['month', 'search', 'filter'].forEach(id => $(id).addEventListener('input', () => { if (!ready || id === 'month' && !monthValid($('month').value)) return; checkExpiry(); render(); }));
+  ['month', 'search', 'filter'].forEach(id => $(id).addEventListener('input', () => { if (!ready || id === 'month' && !monthValid($('month').value)) return; currentPage = 1; checkExpiry(); render(); }));
+  actionToggleButton.addEventListener('click', () => {
+    actionsVisible = !actionsVisible;
+    panel.classList.toggle('actions-hidden', !actionsVisible);
+    panel.classList.toggle('actions-visible', actionsVisible);
+    actionToggleButton.textContent = actionsVisible ? 'Ẩn thao tác' : 'Hiện thao tác';
+    actionToggleButton.setAttribute('aria-pressed', String(actionsVisible));
+  });
+  previousPageButton.addEventListener('click', () => { if (currentPage > 1) { currentPage--; render(); panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
+  nextPageButton.addEventListener('click', () => { currentPage++; render(); panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  mobileList.addEventListener('change', () => { currentPage = 1; if (ready) render(); });
   addHouseholdButton.addEventListener('click', () => openHouseholdEditor('add'));
   $('rows').addEventListener('click', async e => {
     if (!ready || saving || checkExpiry()) return;

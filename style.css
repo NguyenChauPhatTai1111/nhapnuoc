@@ -738,6 +738,60 @@ table {
   white-space: nowrap
 }
 
+.action-toggle {
+  color: #fff;
+  border-color: #147966;
+  background: #147966;
+  white-space: nowrap
+}
+
+.action-toggle:hover {
+  color: #fff;
+  background: #0f6757
+}
+
+.action-toggle[aria-pressed="true"] {
+  color: #147966;
+  border-color: #9fd2c5;
+  background: #eaf6f2
+}
+
+.panel.actions-hidden th:last-child,
+.panel.actions-hidden tbody td:last-child {
+  display: none
+}
+
+.pagination {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) auto minmax(100px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 18px 25px;
+  border-top: 1px solid #e4ecea;
+  background: #fbfdfc
+}
+
+.pagination .page-button:last-child {
+  justify-self: end
+}
+
+.page-button {
+  min-width: 100px;
+  padding: 9px 14px
+}
+
+.page-button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+  background: #f4f7f6
+}
+
+.page-info {
+  color: #52716c;
+  font-size: 12px;
+  font-weight: 700
+}
+
 .house-code,
 .archived {
   display: block;
@@ -862,9 +916,61 @@ table {
 /* On phones, each household becomes a readable card so the action never sits
    outside the viewport at the far end of a wide desktop table. */
 @media(max-width:700px) {
+  main {
+    padding: 20px 10px
+  }
+
+  .heading h1 {
+    margin: 8px 0;
+    font-size: 25px
+  }
+
+  .heading>div>p:last-child,
+  .panel-heading p {
+    display: none
+  }
+
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 16px 0
+  }
+
+  .stats article {
+    min-width: 0;
+    padding: 12px 9px;
+    border-radius: 9px
+  }
+
+  .stats article>span {
+    display: block;
+    min-height: 28px;
+    font-size: 9px;
+    line-height: 1.35
+  }
+
+  .stats strong {
+    margin-top: 5px;
+    font-size: 21px;
+    letter-spacing: -.5px
+  }
+
+  .stats small {
+    font-size: 9px
+  }
+
+  .stats p {
+    display: none
+  }
+
+  .progress {
+    margin-top: 9px
+  }
+
   .panel-heading {
     flex-direction: column;
-    align-items: stretch
+    align-items: stretch;
+    padding: 17px
   }
 
   .month-label {
@@ -877,20 +983,31 @@ table {
   }
 
   .toolbar {
-    align-items: stretch
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    padding: 0 14px 16px
   }
 
-  .toolbar .search,
-  .toolbar select {
+  .toolbar .search {
+    grid-column: 1/-1;
     width: 100%
   }
 
-  .add-household {
+  .toolbar select {
+    grid-column: 1/-1;
+    width: 100%
+  }
+
+  .add-household,
+  .action-toggle {
     width: 100%
   }
 
   .toolbar>span {
-    margin-left: 0
+    grid-column: 1/-1;
+    margin-left: 0;
+    text-align: center
   }
 
   .table-wrap {
@@ -911,7 +1028,7 @@ table {
 
   tbody {
     display: grid;
-    gap: 12px
+    gap: 8px
   }
 
   tbody tr {
@@ -930,7 +1047,7 @@ table {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 11px 14px;
+    padding: 9px 11px;
     border-top: 1px solid #edf1f0;
     font-size: 12px;
     text-align: right;
@@ -951,7 +1068,7 @@ table {
   tbody td:first-child {
     grid-column: 1/-1;
     border-top: 0;
-    padding: 14px;
+    padding: 11px;
     font-size: 14px;
     justify-content: flex-start;
     text-align: left;
@@ -960,6 +1077,10 @@ table {
 
   tbody td:nth-child(2)::before {
     content: "KỲ GHI"
+  }
+
+  tbody td:nth-child(2) {
+    display: none
   }
 
   tbody td:nth-child(3)::before {
@@ -989,7 +1110,7 @@ table {
   }
 
   tbody td:last-child {
-    padding: 12px 14px;
+    padding: 10px 11px;
     background: #fbfdfc
   }
 
@@ -1011,14 +1132,16 @@ table {
   }
 
   tbody .row-actions {
-    width: 100%
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    max-width: none
   }
 
   tbody .row-actions button {
-    width: auto;
-    flex: 1;
+    width: 100%;
     min-height: 44px;
-    font-size: 13px
+    font-size: 12px
   }
 
   .notice {
@@ -1033,6 +1156,27 @@ table {
   .clear-cache {
     width: 100%;
     margin-left: 0
+  }
+
+  .pagination {
+    grid-template-columns: 1fr auto 1fr;
+    gap: 8px;
+    padding: 13px 12px
+  }
+
+  .page-button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 9px 12px
+  }
+
+  .page-info {
+    white-space: nowrap;
+    font-size: 11px
+  }
+
+  .panel-footer {
+    display: none
   }
 }
 
