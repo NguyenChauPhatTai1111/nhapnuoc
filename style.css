@@ -1646,6 +1646,20 @@ body.auth-locked>#toast {
   color: #a1b0ad
 }
 
+.login-field input:-webkit-autofill,
+.login-field input:-webkit-autofill:hover,
+.login-field input:-webkit-autofill:focus {
+  border-radius: 0;
+  -webkit-text-fill-color: #173f3b;
+  caret-color: #173f3b;
+  -webkit-box-shadow: 0 0 0 1000px #fbfdfc inset;
+  transition: background-color 9999s ease-out
+}
+
+.login-field:focus-within input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #fff inset
+}
+
 .login-field button {
   margin: 0 7px 0 3px;
   padding: 7px;

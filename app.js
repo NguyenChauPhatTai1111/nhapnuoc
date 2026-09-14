@@ -64,7 +64,7 @@ setAuthenticated(authStored());
 if (supabaseEnabled) {
   loginUsername.type = 'email';
   loginUsername.placeholder = 'Nhập email quản trị';
-  loginUsername.previousElementSibling?.remove();
+  if (loginUsername.previousElementSibling) loginUsername.previousElementSibling.textContent = '@';
   document.querySelector('label[for="login-username"]').textContent = 'Email đăng nhập';
 }
 loginForm.addEventListener('submit', async event => {
