@@ -1,16 +1,159 @@
 <!doctype html>
 <html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; connect-src 'none'; font-src 'self'; form-action 'self'; frame-src 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self'; trusted-types 'none'; require-trusted-types-for 'script'"><meta name="referrer" content="no-referrer"><title>Sổ nước • Quản lý nước sinh hoạt</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script></head>
-<body>
-<header><a class="brand" href="./"><span class="logo">≈</span> Sổ nước<span class="tag">QUẢN LÝ HỘ DÂN</span></a><span class="local">● Lưu trên thiết bị này</span></header>
-<main>
-<section class="heading"><div><p class="eyebrow">NƯỚC SINH HOẠT / THEO DÕI HẰNG THÁNG</p><h1>Mỗi chỉ số, rõ ràng hơn.</h1><p>Quản lý chỉ số đồng hồ và lượng nước sử dụng của 200 hộ dân.</p></div><div class="actions"><button id="excel">↓ Xuất Excel</button><button id="export">↓ Xuất sao lưu</button><button id="import">↑ Nhập sao lưu</button><input id="file" type="file" accept="application/json,.json" hidden></div></section>
-<section class="notice"><span class="notice-icon">↻</span><div><strong>Lưu lịch sử nhiều tháng</strong><p>Chọn tháng để ghi hoặc xem lại dữ liệu. Dữ liệu không tự xóa; hãy sao lưu định kỳ.</p></div></section>
-<section class="stats"><article><span>Tổng số hộ dân</span><strong>200 <small>hộ</small></strong><p>Danh sách từ hộ 001 đến hộ 200</p></article><article><span>Đã ghi chỉ số tháng này</span><strong id="recorded">0 <small>/ 200 hộ</small></strong><div class="progress"><i id="progress"></i></div></article><article class="accent"><span>Tổng lượng nước sử dụng</span><strong id="total">0 <small>m³</small></strong><p id="total-note">Trong tháng đang chọn</p></article></section>
-<section class="panel"><div class="panel-heading"><div><h2>Sổ ghi chỉ số nước</h2><p>Quên ghi tháng trước? Chọn tháng kết thúc, bấm Ghi chỉ số rồi chọn Từ tháng để ghi gộp.</p></div><label class="month-label">Tháng ghi nước<input type="month" id="month" required></label></div><div class="toolbar"><label class="search"><span>⌕</span><input id="search" type="search" placeholder="Tìm số hộ dân…" aria-label="Tìm số hộ dân"></label><select id="filter" aria-label="Lọc trạng thái"><option value="all">Tất cả trạng thái</option><option value="done">Đã ghi chỉ số</option><option value="debt">Đang nợ</option><option value="pending">Chưa ghi chỉ số</option></select><span id="count"></span></div><div class="table-wrap"><table><thead><tr><th>HỘ DÂN</th><th>KỲ GHI</th><th>CHỈ SỐ CŨ</th><th>CHỈ SỐ MỚI</th><th>TIÊU THỤ (m³)</th><th>TIỀN NỢ / GHI CHÚ</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody id="rows"></tbody></table><p id="empty" hidden>Không tìm thấy hộ dân phù hợp.</p></div><div class="panel-footer"><span>Tiêu thụ là tổng cả kỳ, không chia đều từng tháng. Tổng phía trên chỉ cộng kỳ kết thúc trong tháng đang xem.</span><span>Đơn vị: mét khối (m³)</span></div></section>
-<footer>Sổ nước <span>•</span> Dữ liệu lưu trong trình duyệt, không đồng bộ giữa các thiết bị.</footer>
-</main>
-<dialog id="editor"><form id="edit-form"><div class="dialog-heading"><div><p class="eyebrow" id="edit-month"></p><h2 id="edit-title"></h2></div><button type="button" id="close" aria-label="Đóng">×</button></div><div class="period-fields"><label>Từ tháng<input id="period-start" type="month" required></label><label>Đến tháng<input id="period-end" type="month" readonly required></label></div><p class="hint">Ghi 1 tháng: chọn cùng tháng. Ghi gộp tháng 9–10: Từ tháng 9, Đến tháng 10. Muốn đổi tháng kết thúc, đóng cửa sổ và chọn tháng trên sổ.</p><label>Chỉ số cũ (m³)<input id="previous" type="number" min="0" step="0.001" required></label><p class="hint" id="previous-hint"></p><label>Chỉ số mới (m³)<input id="current" type="number" min="0" step="0.001" required></label><label>Số tiền đang nợ (đ)<input id="debt" type="number" min="0" max="1000000000000" step="1" value="0" required></label><label>Ghi chú nợ<textarea id="debt-note" maxlength="1000" rows="3" placeholder="Ví dụ: Tháng 8 còn nợ 150.000đ"></textarea></label><p class="hint">Nhập số tiền còn nợ để hiện trạng thái Đang nợ. Khi thanh toán hết, sửa về 0. Khoản nợ lưu riêng theo kỳ, không tự cộng sang tháng khác.</p><div class="preview">Lượng nước sử dụng <strong id="preview">— m³</strong></div><p id="error" role="alert"></p><button class="primary" type="submit">Lưu chỉ số</button></form></dialog>
-<dialog id="household-dialog" class="household-dialog"><form id="household-form"><div class="dialog-heading"><div><p class="eyebrow" id="household-mode"></p><h2 id="household-dialog-title"></h2></div><button type="button" id="household-dialog-close" aria-label="Đóng">×</button></div><p class="household-code" id="household-code"></p><label>Tên chủ hộ hoặc tên hộ dân<input id="household-name" maxlength="100" autocomplete="off" required placeholder="Ví dụ: Nguyễn Văn An"></label><p class="hint">Tên này được dùng khi tìm kiếm và xuất Excel. Mã hộ cùng toàn bộ lịch sử chỉ số vẫn giữ nguyên khi đổi tên.</p><p id="household-error" role="alert"></p><div class="dialog-actions"><button type="button" id="household-cancel">Hủy</button><button type="submit" class="primary">Lưu tên hộ</button></div></form></dialog>
-<div id="toast" role="status" hidden></div>
-</body></html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; base-uri 'self'; connect-src 'none'; font-src 'self'; form-action 'self'; frame-src 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self'; trusted-types 'none'; require-trusted-types-for 'script'">
+    <meta name="referrer" content="no-referrer">
+    <title>Sổ nước • Quản lý nước sinh hoạt</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+
+<body class="auth-locked">
+    <section id="login-screen" class="login-screen" aria-label="Đăng nhập quản trị">
+        <div class="login-welcome">
+            <div class="login-brand"><span class="login-logo">≈</span><span>Sổ nước</span></div>
+            <div class="login-intro">
+                <p class="login-eyebrow">QUẢN LÝ NƯỚC SINH HOẠT</p>
+                <h1>Mọi chỉ số.<br><em>Một nơi quản lý.</em></h1>
+                <p>Theo dõi đồng hồ, lượng tiêu thụ và công nợ của từng hộ dân một cách rõ ràng.</p>
+            </div>
+            <div class="login-features"><span>✓ Dữ liệu riêng tư</span><span>✓ Quản lý tập trung</span></div>
+        </div>
+        <div class="login-panel">
+            <form id="login-form" class="login-card" autocomplete="on">
+                <div class="login-shield">⌁</div>
+                <p class="login-eyebrow">KHU VỰC QUẢN TRỊ</p>
+                <h2>Chào mừng trở lại</h2>
+                <p class="login-subtitle">Đăng nhập để tiếp tục quản lý sổ nước.</p>
+                <label for="login-username">Tên đăng nhập</label>
+                <div class="login-field"><span>♙</span><input id="login-username" type="text" autocomplete="username"
+                        autocapitalize="none" spellcheck="false" placeholder="Nhập tên đăng nhập" required autofocus>
+                </div>
+                <label for="login-password">Mật khẩu</label>
+                <div class="login-field"><span>◇</span><input id="login-password" type="password"
+                        autocomplete="current-password" placeholder="Nhập mật khẩu" required><button
+                        id="toggle-password" type="button" aria-label="Hiện mật khẩu">Hiện</button></div>
+                <p id="login-error" class="login-error" role="alert" hidden></p>
+                <button class="login-submit" type="submit">Đăng nhập quản trị <span>→</span></button>
+                <p class="login-note">● Chỉ quản trị viên mới có thể truy cập</p>
+            </form>
+        </div>
+    </section>
+    <header><a class="brand" href="./"><span class="logo">≈</span> Sổ nước<span class="tag">QUẢN LÝ HỘ DÂN</span></a>
+        <div class="account"><span class="local">● Quản trị viên</span><button type="button" id="logout"
+                class="logout">Đăng xuất</button></div>
+    </header>
+    <main>
+        <section class="heading">
+            <div>
+                <p class="eyebrow">NƯỚC SINH HOẠT / THEO DÕI HẰNG THÁNG</p>
+                <h1>Mỗi chỉ số, rõ ràng hơn.</h1>
+                <p>Quản lý chỉ số đồng hồ và lượng nước sử dụng của 200 hộ dân.</p>
+            </div>
+            <div class="actions"><button id="excel">↓ Xuất Excel</button><button id="export">↓ Xuất sao
+                    lưu</button><button id="import">↑ Nhập sao lưu</button><input id="file" type="file"
+                    accept="application/json,.json" hidden></div>
+        </section>
+        <section class="notice"><span class="notice-icon">↻</span>
+            <div><strong>Lưu lịch sử nhiều tháng</strong>
+                <p>Chọn tháng để ghi hoặc xem lại dữ liệu. Dữ liệu không tự xóa; hãy sao lưu định kỳ.</p>
+            </div>
+        </section>
+        <section class="stats">
+            <article><span>Tổng số hộ dân</span><strong>200 <small>hộ</small></strong>
+                <p>Danh sách từ hộ 001 đến hộ 200</p>
+            </article>
+            <article><span>Đã ghi chỉ số tháng này</span><strong id="recorded">0 <small>/ 200 hộ</small></strong>
+                <div class="progress"><i id="progress"></i></div>
+            </article>
+            <article class="accent"><span>Tổng lượng nước sử dụng</span><strong id="total">0 <small>m³</small></strong>
+                <p id="total-note">Trong tháng đang chọn</p>
+            </article>
+        </section>
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Sổ ghi chỉ số nước</h2>
+                    <p>Quên ghi tháng trước? Chọn tháng kết thúc, bấm Ghi chỉ số rồi chọn Từ tháng để ghi gộp.</p>
+                </div><label class="month-label">Tháng ghi nước<input type="month" id="month" required></label>
+            </div>
+            <div class="toolbar"><label class="search"><span>⌕</span><input id="search" type="search"
+                        placeholder="Tìm số hộ dân…" aria-label="Tìm số hộ dân"></label><select id="filter"
+                    aria-label="Lọc trạng thái">
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="done">Đã ghi chỉ số</option>
+                    <option value="debt">Đang nợ</option>
+                    <option value="pending">Chưa ghi chỉ số</option>
+                </select><span id="count"></span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>HỘ DÂN</th>
+                            <th>KỲ GHI</th>
+                            <th>CHỈ SỐ CŨ</th>
+                            <th>CHỈ SỐ MỚI</th>
+                            <th>TIÊU THỤ (m³)</th>
+                            <th>TIỀN NỢ / GHI CHÚ</th>
+                            <th>TRẠNG THÁI</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rows"></tbody>
+                </table>
+                <p id="empty" hidden>Không tìm thấy hộ dân phù hợp.</p>
+            </div>
+            <div class="panel-footer"><span>Tiêu thụ là tổng cả kỳ, không chia đều từng tháng. Tổng phía trên chỉ cộng
+                    kỳ kết thúc trong tháng đang xem.</span><span>Đơn vị: mét khối (m³)</span></div>
+        </section>
+        <footer>Sổ nước <span>•</span> Dữ liệu lưu trong trình duyệt, không đồng bộ giữa các thiết bị.</footer>
+    </main>
+    <dialog id="editor">
+        <form id="edit-form">
+            <div class="dialog-heading">
+                <div>
+                    <p class="eyebrow" id="edit-month"></p>
+                    <h2 id="edit-title"></h2>
+                </div><button type="button" id="close" aria-label="Đóng">×</button>
+            </div>
+            <div class="period-fields"><label>Từ tháng<input id="period-start" type="month" required></label><label>Đến
+                    tháng<input id="period-end" type="month" readonly required></label></div>
+            <p class="hint">Ghi 1 tháng: chọn cùng tháng. Ghi gộp tháng 9–10: Từ tháng 9, Đến tháng 10. Muốn đổi tháng
+                kết thúc, đóng cửa sổ và chọn tháng trên sổ.</p><label>Chỉ số cũ (m³)<input id="previous" type="number"
+                    min="0" step="0.001" required></label>
+            <p class="hint" id="previous-hint"></p><label>Chỉ số mới (m³)<input id="current" type="number" min="0"
+                    step="0.001" required></label><label>Số tiền đang nợ (đ)<input id="debt" type="number" min="0"
+                    max="1000000000000" step="1" value="0" required></label><label>Ghi chú nợ<textarea id="debt-note"
+                    maxlength="1000" rows="3" placeholder="Ví dụ: Tháng 8 còn nợ 150.000đ"></textarea></label>
+            <p class="hint">Nhập số tiền còn nợ để hiện trạng thái Đang nợ. Khi thanh toán hết, sửa về 0. Khoản nợ lưu
+                riêng theo kỳ, không tự cộng sang tháng khác.</p>
+            <div class="preview">Lượng nước sử dụng <strong id="preview">— m³</strong></div>
+            <p id="error" role="alert"></p><button class="primary" type="submit">Lưu chỉ số</button>
+        </form>
+    </dialog>
+    <dialog id="household-dialog" class="household-dialog">
+        <form id="household-form">
+            <div class="dialog-heading">
+                <div>
+                    <p class="eyebrow" id="household-mode"></p>
+                    <h2 id="household-dialog-title"></h2>
+                </div><button type="button" id="household-dialog-close" aria-label="Đóng">×</button>
+            </div>
+            <p class="household-code" id="household-code"></p><label>Tên chủ hộ hoặc tên hộ dân<input
+                    id="household-name" maxlength="100" autocomplete="off" required
+                    placeholder="Ví dụ: Nguyễn Văn An"></label>
+            <p class="hint">Tên này được dùng khi tìm kiếm và xuất Excel. Mã hộ cùng toàn bộ lịch sử chỉ số vẫn giữ
+                nguyên khi đổi tên.</p>
+            <p id="household-error" role="alert"></p>
+            <div class="dialog-actions"><button type="button" id="household-cancel">Hủy</button><button type="submit"
+                    class="primary">Lưu tên hộ</button></div>
+        </form>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+</body>
+
+</html>
