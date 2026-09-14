@@ -1,11 +1,11 @@
 {
-  "name": "nhapmuoc-attendance",
+  "name": "so-nuoc",
   "version": "1.0.0",
   "private": true,
-  "description": "Hệ thống chấm công nội bộ bằng Node.js",
+  "description": "Sổ quản lý chỉ số nước chạy cục bộ và an toàn bằng Node.js",
   "scripts": {
-    "start": "node chamcong/attendance_server.js",
-    "test": "node --test chamcong/tests/*.test.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=24"

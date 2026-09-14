@@ -16,12 +16,14 @@ function monthsInRange(start, end) {
 const numberValid = n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1e12;
 function defaultHouseholds() { return Object.fromEntries(Array.from({length:200},(_,index)=>[String(index+1),{name:`Hộ dân ${String(index+1).padStart(3,'0')}`,active:true}])); }
 function normalizeState(value) {
+  if(!value||typeof value!=='object'||Array.isArray(value)) throw Error('Dữ liệu sao lưu không hợp lệ.');
   const households={...(value.households??defaultHouseholds())};
   for(const houses of Object.values(value.records??{})) for(const id of Object.keys(houses)) households[id]??={name:`Hộ dân ${String(id).padStart(3,'0')}`,active:true};
   return {...value,households};
 }
 function validateHouseholds(households) {
   if(!households||typeof households!=='object'||Array.isArray(households)) throw Error('Danh sách hộ dân không hợp lệ.');
+  if(Object.keys(households).length>5000) throw Error('Danh sách hộ dân vượt quá giới hạn an toàn 5.000 hộ.');
   for(const [id,household] of Object.entries(households)) {
     if(!/^[1-9]\d*$/.test(id)||!household||typeof household.name!=='string'||!household.name.trim()||household.name.length>100||typeof household.active!=='boolean') throw Error(`Thông tin hộ dân ${id} không hợp lệ.`);
   }
@@ -50,8 +52,12 @@ function coveredRecord(records, month, id) {
 function periodLabel(start, end) { return start===end ? end : `${start} → ${end}`; }
 function validateRecords(records) {
   if (!records || typeof records !== 'object' || Array.isArray(records)) throw Error('Dữ liệu sao lưu không hợp lệ.');
+  if(Object.keys(records).length>1200) throw Error('Dữ liệu vượt quá giới hạn an toàn 1.200 tháng.');
+  let recordCount=0;
   for (const [month, houses] of Object.entries(records)) {
     if (!monthValid(month) || !houses || typeof houses !== 'object' || Array.isArray(houses)) throw Error('Tháng trong dữ liệu không hợp lệ.');
+    recordCount+=Object.keys(houses).length;
+    if(recordCount>250000) throw Error('Dữ liệu vượt quá giới hạn an toàn 250.000 bản ghi.');
     for (const [id, r] of Object.entries(houses)) {
       if (!/^[1-9]\d*$/.test(id) || !r || !numberValid(r.previous) || !numberValid(r.current)) throw Error('Chỉ số hoặc số hộ trong dữ liệu không hợp lệ.');
       if (r.startMonth !== undefined && (!monthValid(r.startMonth) || r.startMonth > month)) throw Error('Tháng bắt đầu phải nhỏ hơn hoặc bằng tháng kết thúc.');
@@ -76,8 +82,13 @@ if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent='THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent='Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
   const $ = id => document.getElementById(id);
-  const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
   const fmt = n => new Intl.NumberFormat('vi-VN',{maximumFractionDigits:3}).format(n);
+  const append = (parent, tag, text, className) => {
+    const element=document.createElement(tag);
+    if(text!==undefined) element.textContent=String(text);
+    if(className) element.className=className;
+    parent.append(element); return element;
+  };
   const currentLabel=$('current').closest('label'), previousLabel=$('previous').closest('label'), previousHint=$('previous-hint');
   const periodFields=document.querySelector('.period-fields'), periodHint=document.querySelector('.period-fields + .hint');
   const monthlyReadings=document.createElement('div'), multiToggle=document.createElement('button');
@@ -89,10 +100,7 @@ if (typeof document !== 'undefined') {
   const addHouseholdButton=document.createElement('button');
   addHouseholdButton.type='button'; addHouseholdButton.className='add-household'; addHouseholdButton.textContent='＋ Thêm hộ dân';
   $('count').before(addHouseholdButton);
-  const householdDialog=document.createElement('dialog');
-  householdDialog.className='household-dialog';
-  householdDialog.innerHTML='<form id="household-form"><div class="dialog-heading"><div><p class="eyebrow" id="household-mode"></p><h2 id="household-dialog-title"></h2></div><button type="button" id="household-dialog-close" aria-label="Đóng">×</button></div><p class="household-code" id="household-code"></p><label>Tên chủ hộ hoặc tên hộ dân<input id="household-name" maxlength="100" autocomplete="off" required placeholder="Ví dụ: Nguyễn Văn An"></label><p class="hint">Tên này được dùng khi tìm kiếm và xuất Excel. Mã hộ cùng toàn bộ lịch sử chỉ số vẫn giữ nguyên khi đổi tên.</p><p id="household-error" role="alert"></p><div class="dialog-actions"><button type="button" id="household-cancel">Hủy</button><button type="submit" class="primary">Lưu tên hộ</button></div></form>';
-  document.body.append(householdDialog);
+  const householdDialog=$('household-dialog');
   previousLabel.hidden=true; previousHint.hidden=true; currentLabel.hidden=true; $('previous').required=false; $('current').required=false;
   periodHint.textContent='Chọn 2 hoặc 3 tháng. Mỗi tháng có chỉ số cũ và chỉ số mới riêng; chỉ số cũ của tháng sau tự lấy từ chỉ số mới tháng trước.';
   let state, database=null, storageMode='indexeddb', ready=false, saving=false, editing = null, householdEditing=null, toastTimer, multiEntry=false;
@@ -256,13 +264,16 @@ if (typeof document !== 'undefined') {
     const activeIds=Object.keys(state.households).filter(id=>state.households[id].active).sort((a,b)=>a-b);
     const ids=activeIds.filter(id=>coveredRecord(state.records,month,id)); let total=0;
     Object.keys(records).forEach(id=>total+=records[id].current-baseline(state.records,month,id));
-    document.querySelector('.stats article:first-child strong').innerHTML=`${activeIds.length} <small>hộ</small>`;
+    const householdTotal=document.querySelector('.stats article:first-child strong');
+    householdTotal.replaceChildren(document.createTextNode(`${activeIds.length} `)); append(householdTotal,'small','hộ');
     document.querySelector('.stats article:first-child p').textContent='Danh sách hộ dân đang quản lý';
-    $('recorded').innerHTML=`${ids.length} <small>/ ${activeIds.length} hộ</small>`;
-    $('progress').style.width=`${activeIds.length?ids.length/activeIds.length*100:0}%`; $('total').innerHTML=`${fmt(total)} <small>m³</small>`;
+    $('recorded').replaceChildren(document.createTextNode(`${ids.length} `)); append($('recorded'),'small',`/ ${activeIds.length} hộ`);
+    $('progress').style.width=`${activeIds.length?ids.length/activeIds.length*100:0}%`;
+    $('total').replaceChildren(document.createTextNode(`${fmt(total)} `)); append($('total'),'small','m³');
     $('total-note').textContent=`Tổng các kỳ kết thúc tháng ${month.split('-').reverse().join('/')}`;
 
-    const query=$('search').value.trim().replace(/^hộ\s*/i,''); let shown=0, html='';
+    const query=$('search').value.trim().replace(/^hộ\s*/i,''); let shown=0;
+    const fragment=document.createDocumentFragment();
     const displayIds=Object.keys(state.households).filter(id=>state.households[id].active||coveredRecord(state.records,month,id)).sort((a,b)=>a-b);
     for(const id of displayIds) {
       const label=String(id).padStart(3,'0'), household=state.households[id], name=householdName(id), found=coveredRecord(state.records,month,id), r=found?.record, end=found?.end ?? month, filter=$('filter').value;
@@ -270,9 +281,22 @@ if (typeof document !== 'undefined') {
       if(filter==='done'&&!r || filter==='pending'&&r || filter==='debt'&&!(r?.debt>0)) continue;
       shown++; const prev=baseline(state.records,end,id);
       const customName=name!==`Hộ dân ${label}`, archived=!household.active;
-      html+=`<tr><td><span class="house">⌂</span><span>${escape(name)}${customName?`<small class="house-code">Mã hộ ${label}</small>`:''}${archived?'<small class="archived">Đã xóa khỏi danh sách nhập mới</small>':''}</span></td><td>${r?periodLabel(r.startMonth ?? end,end):month}</td><td>${prev===undefined?'—':fmt(prev)}</td><td>${r?fmt(r.current):'—'}</td><td>${r?fmt(r.current-prev):'—'}</td><td class="debt-cell">${r?.debt>0?fmt(r.debt)+' đ':'—'}<small>${escape(r?.note || '')}</small></td><td><span class="badge ${r?.debt>0?'owing':r?'done':''}">${r?.debt>0?'Đang nợ':r?'Đã ghi chỉ số':'Chưa ghi'}</span></td><td><div class="row-actions"><button class="edit" data-id="${id}">${r?'Sửa chỉ số':'＋ Ghi chỉ số'}</button>${r?`<button class="delete" data-delete-id="${id}">Xóa chỉ số</button>`:''}<button class="rename" data-rename-id="${id}">Đổi tên</button><button class="${archived?'restore':'archive'}" data-${archived?'restore':'archive'}-id="${id}">${archived?'Khôi phục hộ':'Xóa hộ'}</button></div></td></tr>`;
+      const row=document.createElement('tr'), identity=append(row,'td'), icon=append(identity,'span','⌂','house'), identityText=append(identity,'span',name);
+      icon.setAttribute('aria-hidden','true');
+      if(customName) append(identityText,'small',`Mã hộ ${label}`,'house-code');
+      if(archived) append(identityText,'small','Đã xóa khỏi danh sách nhập mới','archived');
+      append(row,'td',r?periodLabel(r.startMonth ?? end,end):month);
+      append(row,'td',prev===undefined?'—':fmt(prev)); append(row,'td',r?fmt(r.current):'—'); append(row,'td',r?fmt(r.current-prev):'—');
+      const debtCell=append(row,'td',r?.debt>0?`${fmt(r.debt)} đ`:'—','debt-cell'); append(debtCell,'small',r?.note || '');
+      const status=append(row,'td'); append(status,'span',r?.debt>0?'Đang nợ':r?'Đã ghi chỉ số':'Chưa ghi',`badge ${r?.debt>0?'owing':r?'done':''}`);
+      const actionCell=append(row,'td'), actions=append(actionCell,'div',undefined,'row-actions');
+      const edit=append(actions,'button',r?'Sửa chỉ số':'＋ Ghi chỉ số','edit'); edit.type='button'; edit.dataset.id=id;
+      if(r) {const remove=append(actions,'button','Xóa chỉ số','delete'); remove.type='button'; remove.dataset.deleteId=id;}
+      const rename=append(actions,'button','Đổi tên','rename'); rename.type='button'; rename.dataset.renameId=id;
+      const archive=append(actions,'button',archived?'Khôi phục hộ':'Xóa hộ',archived?'restore':'archive'); archive.type='button'; archive.dataset[archived?'restoreId':'archiveId']=id;
+      fragment.append(row);
     }
-    $('rows').innerHTML=html; $('count').textContent=`Hiển thị ${shown} / ${displayIds.length} hộ`; $('empty').hidden=shown!==0;
+    $('rows').replaceChildren(fragment); $('count').textContent=`Hiển thị ${shown} / ${displayIds.length} hộ`; $('empty').hidden=shown!==0;
   }
   ['month','search','filter'].forEach(id=>$(id).addEventListener('input',()=>{ if(!ready||id==='month'&&!monthValid($('month').value)) return; checkExpiry(); render(); }));
   addHouseholdButton.addEventListener('click',()=>openHouseholdEditor('add'));
