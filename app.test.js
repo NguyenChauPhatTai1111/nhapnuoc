@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, buildPrintReport, stateToSupabaseRows, supabaseRowsToState } = require('./app');
+const { defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, buildPrintReport, stateMutations } = require('./app');
 
 test('form của hộ mới bắt đầu từ 0, không dùng chỉ số hộ trước', () => {
   assert.deepEqual(readingDefaults(undefined, undefined), { previous: 0, current: 0 });
@@ -67,25 +67,18 @@ test('báo cáo in chỉ lấy hộ đã ghi chỉ số và tách rõ hộ đang
   assert.equal(buildPrintReport(state, '2026-10').total, 0);
 });
 
-test('Supabase lưu mỗi hộ và chỉ số từng tháng thành dòng riêng', () => {
-  const source = {
-    households: { '1': { name: 'Nguyễn Văn An', active: true }, '2': { name: 'Trần Thị Bình', active: false } },
-    records: {
-      '2026-08': { '1': { previous: 10, current: 14, debt: 0, note: '' } },
-      '2026-09': { '1': { previous: 14, current: 20.5, debt: 150000, note: 'Còn nợ' } }
-    }
+test('MySQL chỉ nhận những dòng thực sự thay đổi', () => {
+  const before = {
+    households: { '1': { name: 'Hộ Một', active: true }, '2': { name: 'Hộ Hai', active: true } },
+    records: { '2026-09': { '1': { previous: 10, current: 12, debt: 0, note: '' } } }
   };
-  const rows = stateToSupabaseRows(source);
-  assert.equal(rows.households.length, 2);
-  assert.equal(rows.readings.length, 2);
-  assert.deepEqual(rows.readings[1], {
-    household_id: '1', reading_year: 2026, reading_month: 9,
-    previous_reading: 14, current_reading: 20.5, start_period: '',
-    debt_amount: 150000, note: 'Còn nợ'
-  });
-  const restored = supabaseRowsToState(rows.households, rows.readings.map(row => ({ ...row, consumption: row.current_reading - row.previous_reading })), 123);
-  assert.equal(restored.records['2026-09']['1'].previous, 14);
-  assert.equal(restored.records['2026-09']['1'].current, 20.5);
-  assert.equal(restored.records['2026-09']['1'].current - restored.records['2026-09']['1'].previous, 6.5);
-  assert.equal(restored.updatedAt, 123);
+  const next = JSON.parse(JSON.stringify(before));
+  next.households['1'].name = 'Hộ Một mới';
+  next.records['2026-09']['1'].current = 13;
+  next.records['2026-10'] = { '2': { previous: 4, current: 6, debt: 5000, note: 'Nợ' } };
+  const mutations = stateMutations(before, next);
+  assert.deepEqual(mutations.map(item => item.type), ['household_upsert', 'reading_upsert', 'reading_upsert']);
+  assert.equal(mutations[0].id, '1');
+  assert.equal(mutations[1].period, '2026-09');
+  assert.equal(mutations[2].householdId, '2');
 });

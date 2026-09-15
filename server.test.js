@@ -19,11 +19,9 @@ test('server phục vụ file với security headers',()=>withServer(async origi
   assert.match(await response.text(),/<!doctype html>/i);
 }));
 
-test('server phục vụ tệp cấu hình Supabase cho trình duyệt',()=>withServer(async origin=>{
-  const response=await fetch(`${origin}/supabase-config.js`);
-  assert.equal(response.status,200);
-  assert.match(response.headers.get('content-type'),/text\/javascript/);
-  assert.match(await response.text(),/SUPABASE_CONFIG/);
+test('server không công khai cấu hình cơ sở dữ liệu',()=>withServer(async origin=>{
+  assert.equal((await fetch(`${origin}/config.php`)).status,404);
+  assert.equal((await fetch(`${origin}/database.sql`)).status,404);
 }));
 
 test('server chặn phương thức ghi và tài nguyên ngoài whitelist',()=>withServer(async origin=>{

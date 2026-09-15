@@ -2,9 +2,9 @@
   "name": "so-nuoc",
   "version": "1.0.0",
   "private": true,
-  "description": "Sổ quản lý chỉ số nước chạy cục bộ và an toàn bằng Node.js",
+  "description": "Sổ quản lý chỉ số nước với backend PHP/MySQL",
   "scripts": {
-    "start": "node server.js",
+    "start": "php -S 127.0.0.1:3000",
     "test": "node --test"
   },
   "engines": {

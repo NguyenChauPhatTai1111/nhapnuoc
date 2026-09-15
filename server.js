@@ -11,7 +11,7 @@ const PORT=readInteger(process.env.PORT,3000,1,65535);
 const RATE_LIMIT=readInteger(process.env.RATE_LIMIT,120,10,10_000);
 const ROOT=__dirname;
 const ALLOWED_FILES=new Map([
-  ['/','index.html'], ['/index.html','index.html'], ['/app.js','app.js'], ['/style.css','style.css'], ['/supabase-config.js','supabase-config.js']
+  ['/','index.html'], ['/index.html','index.html'], ['/app.js','app.js'], ['/style.css','style.css']
 ]);
 const TYPES=new Map([['.html','text/html; charset=utf-8'],['.js','text/javascript; charset=utf-8'],['.css','text/css; charset=utf-8']]);
 

@@ -5,12 +5,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; base-uri 'self'; connect-src 'self' https://*.supabase.co; font-src 'self'; form-action 'self'; frame-src 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self'; trusted-types 'none'; require-trusted-types-for 'script'">
+        content="default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-src 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self'; trusted-types 'none'; require-trusted-types-for 'script'">
     <meta name="referrer" content="no-referrer">
+    <meta name="theme-color" content="#075985">
     <title>Sổ nước • Quản lý nước sinh hoạt</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="supabase-config.js" defer></script>
-    <script src="app.js" defer></script>
+    <link rel="stylesheet" href="style.css?v=20260915-4">
+    <script src="app.js?v=20260915-4" defer></script>
 </head>
 
 <body class="auth-locked">
@@ -44,43 +44,53 @@
             </form>
         </div>
     </section>
-    <header><a class="brand" href="./"><span class="logo">≈</span> Sổ nước<span class="tag">QUẢN LÝ HỘ DÂN</span></a>
+    <header><a class="brand" href="./"><span class="logo">≈</span><span class="brand-copy"><strong>Sổ nước</strong><small>Quản lý hộ dân</small></span></a>
         <div class="account"><span class="local">● Quản trị viên</span><button type="button" id="logout"
                 class="logout">Đăng xuất</button></div>
     </header>
     <main>
         <section class="heading">
             <div>
-                <p class="eyebrow">NƯỚC SINH HOẠT / THEO DÕI HẰNG THÁNG</p>
-                <h1>Mỗi chỉ số, rõ ràng hơn.</h1>
+                <p class="eyebrow">BẢNG ĐIỀU KHIỂN · NƯỚC SINH HOẠT</p>
+                <h1>Từng giọt nước.<br><em>Đều rõ ràng.</em></h1>
                 <p>Quản lý chỉ số đồng hồ và lượng nước sử dụng của 200 hộ dân.</p>
             </div>
-            <div class="actions"><button id="print" class="print-action">▣ In sổ tháng</button><button id="excel">↓ Xuất
-                    Excel</button><button id="export">↓ Xuất sao
-                    lưu</button><button id="import">↑ Nhập sao lưu</button><input id="file" type="file"
-                    accept="application/json,.json" hidden></div>
+            <div class="actions">
+                <button id="print" class="print-action"><span>▣</span> In sổ tháng</button>
+                <button id="excel" class="desktop-action"><span>↓</span> Xuất Excel</button>
+                <details class="more-actions">
+                    <summary>Tiện ích <span>⌄</span></summary>
+                    <div class="action-menu">
+                        <button type="button" id="excel-mobile" class="mobile-excel">↓ Xuất Excel</button>
+                        <button id="export"><span>↓</span><span><strong>Xuất sao lưu</strong><small>Tải toàn bộ dữ liệu JSON</small></span></button>
+                        <button id="import"><span>↑</span><span><strong>Nhập sao lưu</strong><small>Khôi phục dữ liệu đã lưu</small></span></button>
+                    </div>
+                </details>
+                <input id="file" type="file" accept="application/json,.json" hidden>
+            </div>
         </section>
-        <section class="notice"><span class="notice-icon">↻</span>
-            <div><strong>Lưu lịch sử nhiều tháng</strong>
-                <p>Chọn tháng để ghi hoặc xem lại dữ liệu. Dữ liệu không tự xóa; hãy sao lưu định kỳ.</p>
+        <section class="notice"><span class="notice-icon">≈</span>
+            <div><strong>Sổ nước của bạn, luôn trong tầm tay</strong>
+                <p>Theo dõi chỉ số, lượng nước và công nợ trong cùng một nơi.</p>
             </div>
         </section>
         <section class="stats">
-            <article><span>Tổng số hộ dân</span><strong>200 <small>hộ</small></strong>
+            <article data-icon="⌂"><span>Tổng số hộ dân</span><strong>200 <small>hộ</small></strong>
                 <p>Danh sách từ hộ 001 đến hộ 200</p>
             </article>
-            <article><span>Đã ghi chỉ số tháng này</span><strong id="recorded">0 <small>/ 200 hộ</small></strong>
+            <article data-icon="✓"><span>Đã ghi chỉ số tháng này</span><strong id="recorded">0 <small>/ 200 hộ</small></strong>
                 <div class="progress"><i id="progress"></i></div>
             </article>
-            <article class="accent"><span>Tổng lượng nước sử dụng</span><strong id="total">0 <small>m³</small></strong>
+            <article class="accent" data-icon="◒"><span>Tổng lượng nước sử dụng</span><strong id="total">0 <small>m³</small></strong>
                 <p id="total-note">Trong tháng đang chọn</p>
             </article>
         </section>
         <section class="panel">
             <div class="panel-heading">
                 <div>
+                    <p class="section-kicker">DANH SÁCH HỘ DÂN</p>
                     <h2>Sổ ghi chỉ số nước</h2>
-                    <p>Quên ghi tháng trước? Chọn tháng kết thúc, bấm Ghi chỉ số rồi chọn Từ tháng để ghi gộp.</p>
+                    <p>Chọn tháng để xem, nhập hoặc cập nhật chỉ số cho từng hộ dân.</p>
                 </div><label class="month-label">Tháng ghi nước<input type="month" id="month" required></label>
             </div>
             <div class="toolbar"><label class="search"><span>⌕</span><input id="search" type="search"
@@ -112,7 +122,7 @@
             <div class="panel-footer"><span>Tiêu thụ là tổng cả kỳ, không chia đều từng tháng. Tổng phía trên chỉ cộng
                     kỳ kết thúc trong tháng đang xem.</span><span>Đơn vị: mét khối (m³)</span></div>
         </section>
-        <footer>Sổ nước <span>•</span> Dữ liệu lưu trong trình duyệt, không đồng bộ giữa các thiết bị.</footer>
+        <footer>Sổ nước <span>•</span> Dữ liệu lưu tập trung trong MySQL và dùng chung trên các thiết bị.</footer>
     </main>
     <section id="print-report" class="print-report" aria-hidden="true">
         <header class="print-report-header">

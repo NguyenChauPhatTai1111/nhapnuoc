@@ -1,99 +1,54 @@
 'use strict';
 if (typeof document !== 'undefined') {
-const AUTH_KEY = 'so-nuoc-admin-auth';
-const SUPABASE_SESSION_KEY = 'so-nuoc-supabase-session';
-const SUPABASE_CONFIG = window.SUPABASE_CONFIG ?? {};
-const supabaseEnabled = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(SUPABASE_CONFIG.url ?? '') && typeof SUPABASE_CONFIG.publishableKey === 'string' && SUPABASE_CONFIG.publishableKey.length > 20;
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
 const loginUsername = document.getElementById('login-username');
 const loginPassword = document.getElementById('login-password');
 const loginError = document.getElementById('login-error');
-const AUTH_DIGEST = 'db420f3b3c05d2c947fca54462bbd21d12642d5e8359902c74ab9eb4800c518b';
-
-async function authDigest(username, password) {
-  const data = new TextEncoder().encode(`${username}\u0000${password}`);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function authStored() {
-  try {
-    if (!supabaseEnabled) return sessionStorage.getItem(AUTH_KEY) === 'yes';
-    const session = JSON.parse(localStorage.getItem(SUPABASE_SESSION_KEY) || 'null');
-    return Boolean(session?.access_token && session?.refresh_token && session?.user?.id);
-  } catch { return false; }
-}
-function storedSupabaseSession() {
-  try { return JSON.parse(localStorage.getItem(SUPABASE_SESSION_KEY) || 'null'); } catch { return null; }
-}
-function saveSupabaseSession(session) {
-  localStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify({
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
-    expires_at: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
-    user: { id: session.user.id, email: session.user.email }
-  }));
-}
-async function supabaseAuthRequest(path, body) {
-  const response = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/${path}`, {
-    method: 'POST',
-    headers: { apikey: SUPABASE_CONFIG.publishableKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+let csrfToken = null;
+async function apiRequest(action, options = {}) {
+  const response = await fetch(`api.php?action=${encodeURIComponent(action)}`, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...options.headers
+    }
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw Error(result.msg || result.error_description || result.message || 'Không kết nối được Supabase.');
+  if (!response.ok) {
+    if (response.status === 401) {
+      window.soNuocApi.authenticated = false;
+      setAuthenticated(false);
+    }
+    throw Error(result.error || `Máy chủ phản hồi lỗi ${response.status}.`);
+  }
+  if (result.csrfToken) csrfToken = result.csrfToken;
   return result;
 }
-async function activeSupabaseSession() {
-  let session = storedSupabaseSession();
-  if (!session) throw Error('Phiên đăng nhập đã hết hạn.');
-  if ((session.expires_at ?? 0) <= Math.floor(Date.now() / 1000) + 60) {
-    session = await supabaseAuthRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
-    saveSupabaseSession(session);
-  }
-  return session;
-}
-window.soNuocSupabase = { enabled: supabaseEnabled, config: SUPABASE_CONFIG, activeSession: activeSupabaseSession, getSession: storedSupabaseSession, onAuthenticated: null };
+window.soNuocApi = { request: apiRequest, onAuthenticated: null, authenticated: false };
 function setAuthenticated(authenticated) {
   document.body.classList.toggle('auth-locked', !authenticated);
   loginScreen.hidden = authenticated;
   if (!authenticated) requestAnimationFrame(() => loginUsername.focus());
 }
-setAuthenticated(authStored());
-if (supabaseEnabled) {
-  loginUsername.type = 'email';
-  loginUsername.placeholder = 'Nhập email quản trị';
-  if (loginUsername.previousElementSibling) loginUsername.previousElementSibling.textContent = '@';
-  document.querySelector('label[for="login-username"]').textContent = 'Email đăng nhập';
-}
+setAuthenticated(false);
 loginForm.addEventListener('submit', async event => {
   event.preventDefault();
   const submitButton = loginForm.querySelector('[type="submit"]');
   submitButton.disabled = true;
   try {
-    if (supabaseEnabled) {
-      const session = await supabaseAuthRequest('token?grant_type=password', { email: loginUsername.value.trim(), password: loginPassword.value });
-      saveSupabaseSession(session);
-      loginError.hidden = true;
-      loginPassword.value = '';
-      setAuthenticated(true);
-      await window.soNuocSupabase.onAuthenticated?.();
-      return;
-    }
-    if (await authDigest(loginUsername.value.trim(), loginPassword.value) === AUTH_DIGEST) {
-      try { sessionStorage.setItem(AUTH_KEY, 'yes'); } catch { }
-      loginError.hidden = true;
-      loginPassword.value = '';
-      setAuthenticated(true);
-      return;
-    }
-    loginError.textContent = 'Tên đăng nhập hoặc mật khẩu chưa đúng. Vui lòng thử lại.';
+    await apiRequest('login', { method: 'POST', body: JSON.stringify({ username: loginUsername.value.trim(), password: loginPassword.value }) });
+    window.soNuocApi.authenticated = true;
+    loginError.hidden = true;
+    loginPassword.value = '';
+    setAuthenticated(true);
+    await window.soNuocApi.onAuthenticated?.();
+  } catch (error) {
+    loginError.textContent = error.message;
     loginError.hidden = false;
     loginPassword.select();
-  } catch (error) {
-    loginError.textContent = supabaseEnabled ? error.message : 'Trình duyệt không hỗ trợ xác thực. Vui lòng cập nhật trình duyệt và thử lại.';
-    loginError.hidden = false;
   } finally {
     submitButton.disabled = false;
   }
@@ -104,24 +59,25 @@ document.getElementById('toggle-password').addEventListener('click', event => {
   event.currentTarget.textContent = showing ? 'Hiện' : 'Ẩn';
   event.currentTarget.setAttribute('aria-label', showing ? 'Hiện mật khẩu' : 'Ẩn mật khẩu');
 });
-document.getElementById('logout').addEventListener('click', () => {
-  try { sessionStorage.removeItem(AUTH_KEY); } catch { }
-  if (supabaseEnabled) {
-    const session = storedSupabaseSession();
-    if (session?.access_token) fetch(`${SUPABASE_CONFIG.url}/auth/v1/logout`, { method: 'POST', headers: { apikey: SUPABASE_CONFIG.publishableKey, Authorization: `Bearer ${session.access_token}` } }).catch(() => {});
-    try { localStorage.removeItem(SUPABASE_SESSION_KEY); } catch { }
-  }
+document.getElementById('logout').addEventListener('click', async () => {
+  await apiRequest('logout', { method: 'POST', body: '{}' }).catch(() => {});
+  window.soNuocApi.authenticated = false;
+  csrfToken = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   loginForm.reset();
   loginError.hidden = true;
   setAuthenticated(false);
 });
+apiRequest('session').then(async session => {
+  window.soNuocApi.authenticated = session.authenticated;
+  setAuthenticated(session.authenticated);
+  if (session.authenticated) await window.soNuocApi.onAuthenticated?.();
+}).catch(error => {
+  loginError.textContent = error.message;
+  loginError.hidden = false;
+});
 }
 
-const KEY = 'so-nuoc-v1';
-const PRE_IDB_BACKUP_KEY = 'so-nuoc-v1-pre-indexeddb-backup';
-const DB_NAME = 'so-nuoc-indexeddb';
-const DB_VERSION = 1;
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 const monthValid = m => typeof m === 'string' && /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(m);
 function previousMonth(m) { const [y, n] = m.split('-').map(Number); return n === 1 ? `${y - 1}-12` : `${y}-${String(n - 1).padStart(2, '0')}`; }
@@ -209,45 +165,28 @@ function buildPrintReport(state, month) {
   });
   return { rows, total: rows.length, recorded: rows.length, owing, paid: rows.length - owing, consumption, debt };
 }
-function stateToSupabaseRows(state) {
-  const households = Object.entries(state.households).map(([id, household]) => ({
-    household_id: id,
-    household_name: household.name,
-    active: household.active
-  }));
-  const readings = [];
-  for (const [period, houses] of Object.entries(state.records)) {
-    const [year, month] = period.split('-').map(Number);
-    for (const [id, record] of Object.entries(houses)) readings.push({
-      household_id: id,
-      reading_year: year,
-      reading_month: month,
-      previous_reading: record.previous,
-      current_reading: record.current,
-      start_period: record.startMonth ?? '',
-      debt_amount: record.debt || 0,
-      note: record.note || ''
-    });
+function stateMutations(before, next) {
+  const mutations = [];
+  const oldHouseholds = before?.households ?? {}, newHouseholds = next.households ?? {};
+  for (const [id, household] of Object.entries(newHouseholds)) {
+    if (JSON.stringify(oldHouseholds[id]) !== JSON.stringify(household)) mutations.push({ type: 'household_upsert', id, name: household.name, active: household.active });
   }
-  return { households, readings };
-}
-function supabaseRowsToState(householdRows, readingRows, updatedAt = 0) {
-  const households = {}, records = {};
-  for (const row of householdRows) households[String(row.household_id)] = { name: row.household_name, active: row.active };
-  for (const row of readingRows) {
-    const period = `${row.reading_year}-${String(row.reading_month).padStart(2, '0')}`;
-    const previous = Number(row.previous_reading), current = Number(row.current_reading);
-    if (row.consumption !== undefined && Math.abs(Number(row.consumption) - (current - previous)) > 0.001) throw Error(`Mức tiêu thụ hộ ${row.household_id}, tháng ${period} không khớp chỉ số.`);
-    records[period] ??= {};
-    records[period][String(row.household_id)] = {
-      previous,
-      current,
-      debt: Number(row.debt_amount || 0),
-      note: row.note || '',
-      ...(row.start_period && row.start_period !== period ? { startMonth: row.start_period } : {})
-    };
+  const oldRecords = before?.records ?? {}, newRecords = next.records ?? {};
+  const periods = new Set([...Object.keys(oldRecords), ...Object.keys(newRecords)]);
+  for (const period of periods) {
+    const ids = new Set([...Object.keys(oldRecords[period] ?? {}), ...Object.keys(newRecords[period] ?? {})]);
+    for (const householdId of ids) {
+      const oldRecord = oldRecords[period]?.[householdId], record = newRecords[period]?.[householdId];
+      if (!record && oldRecord) mutations.push({ type: 'reading_delete', householdId, period });
+      else if (record && JSON.stringify(oldRecord) !== JSON.stringify(record)) mutations.push({
+        type: 'reading_upsert', householdId, period,
+        previous: record.previous, current: record.current,
+        startMonth: record.startMonth ?? null, debt: record.debt || 0, note: record.note || ''
+      });
+    }
   }
-  return normalizeState({ version: 1, resetAt: Date.now() + WEEK, updatedAt, households, records });
+  for (const id of Object.keys(oldHouseholds)) if (!newHouseholds[id]) mutations.push({ type: 'household_delete', id });
+  return mutations;
 }
 function validateRecords(records) {
   if (!records || typeof records !== 'object' || Array.isArray(records)) throw Error('Dữ liệu sao lưu không hợp lệ.');
@@ -276,12 +215,12 @@ function validateRecords(records) {
   }
   return records;
 }
-if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, buildPrintReport, stateToSupabaseRows, supabaseRowsToState, WEEK };
+if (typeof module !== 'undefined') module.exports = { previousMonth, nextMonth, monthsInRange, buildMonthlyRecords, defaultHouseholds, nextAvailableHouseholdId, readingDefaults, stripLeadingZeros, paginate, normalizeState, validateHouseholds, baseline, validateRecords, coveredRecord, buildPrintReport, stateMutations, WEEK };
 if (typeof document !== 'undefined') {
   document.querySelector('thead th:last-child').textContent = 'THAO TÁC';
   document.querySelector('.heading > div > p:last-child').textContent = 'Quản lý danh sách hộ dân, chỉ số đồng hồ và lượng nước sử dụng theo từng tháng.';
   const $ = id => document.getElementById(id);
-  const cloud = window.soNuocSupabase ?? { enabled: false };
+  const api = window.soNuocApi;
   const isEditorNumber = element => element instanceof HTMLInputElement && element.type === 'number' && $('editor').contains(element);
   document.addEventListener('focusin', event => {
     if (isEditorNumber(event.target) && event.target.value === '0') event.target.select();
@@ -301,226 +240,91 @@ if (typeof document !== 'undefined') {
     if (className) element.className = className;
     parent.append(element); return element;
   };
+  const makeButton = (text, className) => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = className; button.textContent = text;
+    return button;
+  };
   const currentLabel = $('current').closest('label'), previousLabel = $('previous').closest('label'), previousHint = $('previous-hint');
   const periodFields = document.querySelector('.period-fields'), periodHint = document.querySelector('.period-fields + .hint');
   const monthlyReadings = document.createElement('div'), multiToggle = document.createElement('button');
   monthlyReadings.id = 'monthly-readings'; previousLabel.before(monthlyReadings);
   multiToggle.type = 'button'; multiToggle.className = 'multi-toggle'; periodFields.before(multiToggle);
-  const clearCacheButton = document.createElement('button');
-  clearCacheButton.type = 'button'; clearCacheButton.className = 'clear-cache'; clearCacheButton.textContent = 'Xóa cache localStorage';
-  document.querySelector('.notice').append(clearCacheButton);
-  const addHouseholdButton = document.createElement('button');
-  addHouseholdButton.type = 'button'; addHouseholdButton.className = 'add-household'; addHouseholdButton.textContent = '＋ Thêm hộ dân';
+  const clearCacheButton = makeButton('↻ Tải lại dữ liệu', 'clear-cache');
+  const clearCacheHost = document.querySelector('.notice') ?? document.querySelector('.actions');
+  clearCacheHost?.append(clearCacheButton);
+  const addHouseholdButton = makeButton('＋ Thêm hộ dân', 'add-household');
   $('count').before(addHouseholdButton);
-  const actionToggleButton = document.createElement('button');
-  actionToggleButton.type = 'button'; actionToggleButton.className = 'action-toggle'; actionToggleButton.textContent = 'Hiện thao tác'; actionToggleButton.setAttribute('aria-pressed', 'false');
+  const actionToggleButton = makeButton('Quản lý hộ', 'action-toggle');
+  actionToggleButton.setAttribute('aria-pressed', 'false');
+  actionToggleButton.setAttribute('aria-controls', 'rows');
   addHouseholdButton.before(actionToggleButton);
   const panel = document.querySelector('.panel'); panel.classList.add('actions-hidden');
   const pagination = document.createElement('nav'); pagination.className = 'pagination'; pagination.setAttribute('aria-label', 'Phân trang danh sách hộ dân');
-  const previousPageButton = document.createElement('button'); previousPageButton.type = 'button'; previousPageButton.className = 'page-button'; previousPageButton.textContent = '← Trước';
+  const previousPageButton = makeButton('← Trước', 'page-button');
   const pageInfo = document.createElement('span'); pageInfo.className = 'page-info'; pageInfo.setAttribute('aria-live', 'polite');
-  const nextPageButton = document.createElement('button'); nextPageButton.type = 'button'; nextPageButton.className = 'page-button'; nextPageButton.textContent = 'Sau →';
+  const nextPageButton = makeButton('Sau →', 'page-button');
   pagination.append(previousPageButton, pageInfo, nextPageButton); document.querySelector('.panel-footer').before(pagination);
   const householdDialog = $('household-dialog');
   previousLabel.hidden = true; previousHint.hidden = true; currentLabel.hidden = true; $('previous').required = false; $('current').required = false;
   periodHint.textContent = 'Chọn 2 hoặc 3 tháng. Mỗi tháng có chỉ số cũ và chỉ số mới riêng; chỉ số cũ của tháng sau tự lấy từ chỉ số mới tháng trước.';
-  let state, database = null, storageMode = 'indexeddb', remoteStorage = false, ready = false, saving = false, editing = null, householdEditing = null, toastTimer, multiEntry = false, currentPage = 1, actionsVisible = false;
+  let state, ready = false, saving = false, loading = false, editing = null, householdEditing = null, toastTimer, multiEntry = false, currentPage = 1, actionsVisible = false;
   const mobileList = matchMedia('(max-width:700px)');
   const fresh = () => ({ version: 1, resetAt: Date.now() + WEEK, households: defaultHouseholds(), records: {} });
   function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 5500); }
-  const requestResult = request => new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-  const transactionDone = transaction => new Promise((resolve, reject) => { transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(transaction.error || Error('Giao dịch IndexedDB bị hủy.')); });
-  function openDatabase() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('records')) {
-          const records = db.createObjectStore('records', { keyPath: ['month', 'houseId'] });
-          records.createIndex('byMonth', 'month'); records.createIndex('byHouse', 'houseId');
-        }
-        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
-      };
-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(Error('IndexedDB đang bị khóa bởi một cửa sổ khác.'));
-    });
-  }
-  function canonicalState(value) {
-    const records = {};
-    for (const month of Object.keys(value.records).sort()) {
-      records[month] = {};
-      for (const id of Object.keys(value.records[month]).sort((a, b) => a - b)) records[month][id] = value.records[month][id];
-    }
-    const households = {};
-    for (const id of Object.keys(value.households).sort((a, b) => a - b)) households[id] = value.households[id];
-    return { version: value.version, resetAt: value.resetAt, households, records };
-  }
-  function flattenedRecords(value) {
-    const result = new Map();
-    for (const [month, houses] of Object.entries(value.records)) for (const [houseId, record] of Object.entries(houses)) result.set(`${month}\u0000${houseId}`, { month, houseId: String(houseId), ...record });
-    return result;
-  }
-  async function readDatabaseState(db) {
-    const transaction = db.transaction(['records', 'meta'], 'readonly'), recordsStore = transaction.objectStore('records'), metaStore = transaction.objectStore('meta');
-    const [meta, rows] = await Promise.all([requestResult(metaStore.get('state')), requestResult(recordsStore.getAll()), transactionDone(transaction)]);
-    if (!meta) return null;
-    const loaded = { version: meta.version, resetAt: meta.resetAt, updatedAt: meta.updatedAt ?? 0, households: meta.households ?? defaultHouseholds(), records: {} };
-    for (const row of rows) {
-      const { month, houseId, ...record } = row;
-      loaded.records[month] ??= {}; loaded.records[month][houseId] = record;
-    }
-    if (loaded.version !== 1 || !Number.isFinite(loaded.resetAt)) throw Error('Thông tin IndexedDB không hợp lệ.');
-    const normalized = normalizeState(loaded);
-    validateHouseholds(normalized.households); validateRecords(normalized.records); return normalized;
-  }
-  async function writeDatabaseState(db, before, next) {
-    const oldRows = flattenedRecords(before ?? { records: {} }), newRows = flattenedRecords(next);
-    const transaction = db.transaction(['records', 'meta'], 'readwrite'), recordsStore = transaction.objectStore('records'), metaStore = transaction.objectStore('meta');
-    for (const [key, row] of oldRows) if (!newRows.has(key)) recordsStore.delete([row.month, row.houseId]);
-    for (const [key, row] of newRows) if (!oldRows.has(key) || JSON.stringify(oldRows.get(key)) !== JSON.stringify(row)) recordsStore.put(row);
-    metaStore.put({ key: 'state', version: next.version, resetAt: next.resetAt, updatedAt: next.updatedAt ?? Date.now(), households: next.households });
-    await transactionDone(transaction);
-  }
-  function readLocalState() {
-    const raw = localStorage.getItem(KEY); if (!raw) return null;
-    const value = normalizeState(JSON.parse(raw));
-    if (value.version !== 1 || !Number.isFinite(value.resetAt)) throw Error('Dữ liệu localStorage không hợp lệ.');
-    validateHouseholds(value.households); validateRecords(value.records); return value;
-  }
-  async function supabaseDataRequest(path, options = {}) {
-    const session = await cloud.activeSession();
-    const response = await fetch(`${cloud.config.url}/rest/v1/${path}`, {
-      ...options,
-      headers: {
-        apikey: cloud.config.publishableKey,
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-        ...options.headers
-      }
-    });
-    const result = await response.json().catch(() => null);
-    if (!response.ok) throw Error(result?.message || `Supabase phản hồi lỗi ${response.status}.`);
-    return { result, session };
-  }
-  async function uploadSupabaseState(value) {
-    const { households, readings } = stateToSupabaseRows(value);
-    const { result } = await supabaseDataRequest('rpc/sync_water_data', {
-      method: 'POST',
-      body: JSON.stringify({ p_households: households, p_readings: readings })
-    });
-    return result;
-  }
-  async function saveLocalCopy(before, next) {
-    if (storageMode === 'indexeddb') await writeDatabaseState(database, before, next);
-    else {
-      const original = localStorage.getItem(KEY);
-      if (original && localStorage.getItem(PRE_IDB_BACKUP_KEY) === null) localStorage.setItem(PRE_IDB_BACKUP_KEY, original);
-      localStorage.setItem(KEY, JSON.stringify(next));
-    }
-  }
-  async function connectRemoteStorage() {
-    if (!cloud.enabled || !cloud.getSession?.() || !state) return false;
-    try {
-      const [{ result: households }, { result: readings }] = await Promise.all([
-        supabaseDataRequest('water_households?select=household_id,household_name,active,updated_at&order=household_id'),
-        supabaseDataRequest('water_readings?select=household_id,reading_year,reading_month,previous_reading,current_reading,consumption,start_period,debt_amount,note,updated_at&order=reading_year,reading_month,household_id')
-      ]);
-      if (!households?.length) {
-        const { result: legacyRows } = await supabaseDataRequest('water_app_state?select=state,updated_at&limit=1').catch(() => ({ result: [] }));
-        if (legacyRows?.[0]?.state) {
-          const legacy = normalizeState(legacyRows[0].state);
-          validateHouseholds(legacy.households); validateRecords(legacy.records);
-          state = { ...legacy, updatedAt: Date.parse(legacyRows[0].updated_at) || Date.now() };
-        }
-        await uploadSupabaseState(state);
-      } else {
-        const timestamps = [...households, ...readings].map(row => Date.parse(row.updated_at) || 0);
-        const remoteTime = Math.max(0, ...timestamps);
-        const remote = supabaseRowsToState(households, readings, remoteTime);
-        validateHouseholds(remote.households); validateRecords(remote.records);
-        if ((state.updatedAt ?? 0) > remoteTime) await uploadSupabaseState(state);
-        else if (JSON.stringify(canonicalState(remote)) !== JSON.stringify(canonicalState(state))) {
-          const before = state;
-          state = remote;
-          await saveLocalCopy(before, state);
-        }
-      }
-      remoteStorage = true;
-      document.querySelector('.local').textContent = '● Đã đồng bộ Supabase';
-      if (ready) render();
-      return true;
-    } catch (error) {
-      remoteStorage = false;
-      console.error('Không đồng bộ được Supabase:', error);
-      if (ready) toast('Chưa đồng bộ được Supabase; dữ liệu vẫn an toàn trên thiết bị này.');
-      return false;
-    }
-  }
   async function initializeStorage() {
-    let localState = null, localError = null, migrated = false;
-    try { localState = readLocalState(); } catch (err) { localError = err; }
+    if (loading) return;
+    loading = true;
     try {
-      database = await openDatabase();
-      const databaseState = await readDatabaseState(database);
-      if (databaseState) {
-        if (localState?.updatedAt > databaseState.updatedAt) {
-          await writeDatabaseState(database, databaseState, localState);
-          const verified = await readDatabaseState(database);
-          if (JSON.stringify(canonicalState(verified)) !== JSON.stringify(canonicalState(localState))) throw Error('Xác minh dữ liệu dự phòng sau khi khôi phục không thành công.');
-          state = verified;
-        } else state = databaseState;
-      }
-      else {
-        const source = localState ?? fresh();
-        await writeDatabaseState(database, null, source);
-        const verified = await readDatabaseState(database);
-        if (JSON.stringify(canonicalState(verified)) !== JSON.stringify(canonicalState(source))) throw Error('Xác minh dữ liệu sau khi chuyển đổi không thành công.');
-        state = verified; migrated = Boolean(localState);
-      }
-      storageMode = 'indexeddb';
-    } catch (err) {
-      console.error('Không thể dùng IndexedDB:', err);
-      database?.close(); database = null; storageMode = 'localstorage';
-      state = localState ?? fresh();
-      toast(localError ? 'Không đọc được dữ liệu đã lưu. Dữ liệu cũ chưa bị ghi đè.' : 'IndexedDB chưa hoạt động; ứng dụng đang dùng dữ liệu localStorage và chưa xóa dữ liệu nào.');
-    }
-    ready = true;
-    document.querySelector('.local').textContent = storageMode === 'indexeddb' ? '● Đã lưu bằng IndexedDB trên thiết bị' : '● Đang dùng localStorage dự phòng';
-    if (cloud.enabled && cloud.getSession?.()) await connectRemoteStorage();
-    render();
-    if (migrated) toast('Đã chuyển và xác minh dữ liệu sang IndexedDB. Bản localStorage cũ vẫn được giữ nguyên để dự phòng.');
-    else if (localError) toast('Dữ liệu localStorage cũ không đọc được và vẫn được giữ nguyên; IndexedDB đang hoạt động với dữ liệu an toàn hiện có.');
+      const loaded = normalizeState(await api.request('state'));
+      validateHouseholds(loaded.households); validateRecords(loaded.records);
+      if (!Object.keys(loaded.households).length) {
+        const initial = fresh();
+        await api.request('mutations', { method: 'POST', body: JSON.stringify({ mutations: stateMutations(null, initial) }) });
+        state = initial;
+      } else state = loaded;
+      ready = true;
+      document.querySelector('.local').textContent = '● Đã kết nối MySQL';
+      render();
+    } catch (error) {
+      ready = false;
+      console.error('Không tải được dữ liệu MySQL:', error);
+      toast(error.message || 'Không tải được dữ liệu từ MySQL.');
+    } finally { loading = false; }
   }
   async function persist(next) {
     if (saving) return false;
     saving = true;
     try {
-      const saved = { ...next, updatedAt: Date.now() };
-      await saveLocalCopy(state, saved);
-      state = saved;
-      if (cloud.enabled && cloud.getSession?.()) {
-        try { await uploadSupabaseState(saved); remoteStorage = true; document.querySelector('.local').textContent = '● Đã đồng bộ Supabase'; }
-        catch (error) { remoteStorage = false; console.error('Không lưu được lên Supabase:', error); toast('Đã lưu trên thiết bị nhưng chưa đồng bộ được Supabase.'); }
-      }
+      const mutations = stateMutations(state, next);
+      if (mutations.length) await api.request('mutations', { method: 'POST', body: JSON.stringify({ mutations }) });
+      state = next;
+      document.querySelector('.local').textContent = '● Đã lưu vào MySQL';
       return true;
     } catch (err) {
       console.error('Không lưu được dữ liệu:', err);
-      toast('Không lưu được dữ liệu. Dữ liệu đang hiển thị chưa bị thay đổi; vui lòng xuất bản sao lưu và thử lại.'); return false;
+      toast(err.message || 'Không lưu được dữ liệu vào MySQL.'); return false;
     } finally { saving = false; }
   }
-  if (cloud.enabled) cloud.onAuthenticated = connectRemoteStorage;
-  window.addEventListener('focus', () => { if (ready && !saving && cloud.enabled && cloud.getSession?.()) connectRemoteStorage(); });
-  clearCacheButton.addEventListener('click', () => {
-    if (!ready || saving) return;
-    if (storageMode !== 'indexeddb') { toast('Không thể xóa localStorage vì hệ thống đang dùng nó làm nơi lưu dự phòng.'); return; }
-    try {
-      const hasOldData = localStorage.getItem(KEY) !== null || localStorage.getItem(PRE_IDB_BACKUP_KEY) !== null;
-      if (!hasOldData) { toast('localStorage hiện không có bản dữ liệu cũ cần xóa.'); return; }
-      if (!confirm('Chỉ xóa các bản dữ liệu cũ trong localStorage. Dữ liệu chính trong IndexedDB vẫn được giữ nguyên. Hãy chắc chắn bạn đã xuất sao lưu nếu cần. Tiếp tục?')) return;
-      localStorage.removeItem(KEY); localStorage.removeItem(PRE_IDB_BACKUP_KEY);
-      if (localStorage.getItem(KEY) !== null || localStorage.getItem(PRE_IDB_BACKUP_KEY) !== null) throw Error('Không xác minh được thao tác xóa.');
-      toast('Đã xóa cache localStorage. Dữ liệu chính trong IndexedDB vẫn an toàn.');
-    } catch (err) { console.error('Không xóa được localStorage:', err); toast('Không xóa được cache localStorage. Dữ liệu hiện tại không bị thay đổi.'); }
+  api.onAuthenticated = initializeStorage;
+  const reloadFromMySql = () => { if (api.authenticated && !saving && !loading) initializeStorage(); };
+  window.addEventListener('focus', reloadFromMySql);
+  window.addEventListener('pageshow', reloadFromMySql);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reloadFromMySql(); });
+  clearCacheButton.addEventListener('click', async () => { await initializeStorage(); if (ready) toast('Đã tải dữ liệu mới nhất từ MySQL.'); });
+  const moreActions = document.querySelector('.more-actions');
+  $('excel-mobile').addEventListener('click', () => $('excel').click());
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && moreActions?.open) {
+      moreActions.open = false;
+      moreActions.querySelector('summary').focus();
+    }
+  });
+  document.addEventListener('click', event => {
+    if (moreActions?.open && !moreActions.contains(event.target)) moreActions.open = false;
+  });
+  moreActions?.querySelector('.action-menu')?.addEventListener('click', event => {
+    if (event.target.closest('button')) moreActions.open = false;
   });
   const now = new Date(); $('month').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   function checkExpiry() { return false; }
@@ -608,7 +412,7 @@ if (typeof document !== 'undefined') {
     actionsVisible = !actionsVisible;
     panel.classList.toggle('actions-hidden', !actionsVisible);
     panel.classList.toggle('actions-visible', actionsVisible);
-    actionToggleButton.textContent = actionsVisible ? 'Ẩn thao tác' : 'Hiện thao tác';
+    actionToggleButton.textContent = actionsVisible ? 'Đóng quản lý' : 'Quản lý hộ';
     actionToggleButton.setAttribute('aria-pressed', String(actionsVisible));
   });
   previousPageButton.addEventListener('click', () => { if (currentPage > 1) { currentPage--; render(); panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
@@ -826,7 +630,6 @@ if (typeof document !== 'undefined') {
     } catch (err) { toast(err instanceof SyntaxError ? 'Tệp JSON không hợp lệ.' : err.message); } finally { e.target.value = ''; }
   };
 
-  initializeStorage();
 }
 
 // An uncompressed ZIP container keeps Excel export available offline.

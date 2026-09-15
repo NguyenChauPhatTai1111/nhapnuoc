@@ -1,0 +1,11 @@
+Options -Indexes
+
+<FilesMatch "^(config\.php|config\.example\.php|database\.sql|package(-lock)?\.json)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "no-referrer"
+</IfModule>

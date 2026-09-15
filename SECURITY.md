@@ -21,4 +21,4 @@ Chạy `npm.cmd test` trước mỗi lần triển khai.
 
 ## Giới hạn mô hình bảo mật
 
-Dữ liệu IndexedDB/localStorage không phải kho bí mật: người có quyền truy cập thiết bị hoặc hồ sơ trình duyệt vẫn có thể đọc dữ liệu. Khi dùng chung máy, hãy bảo vệ tài khoản hệ điều hành, bật mã hóa ổ đĩa và khóa màn hình. HTTPS là bắt buộc khi đưa ứng dụng lên mạng.
+Dữ liệu chính được lưu trong MySQL và chỉ API PHP được phép biết mật khẩu database. Không đưa `config.php` lên Git hoặc gửi cho người khác. Khi dùng chung máy, hãy đăng xuất sau khi sử dụng. HTTPS là bắt buộc khi đưa ứng dụng lên mạng.
