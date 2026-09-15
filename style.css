@@ -913,16 +913,6 @@ table {
   background: #f2faf7
 }
 
-.clear-cache {
-  margin-left: auto;
-  align-self: center;
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: #9a493b;
-  border-color: #ead1cb;
-  background: #fffdfc
-}
-
 .add-household {
   color: #147966;
   border-color: #b9ddd2;
@@ -1343,11 +1333,6 @@ table {
   .notice>div {
     flex: 1;
     min-width: 200px
-  }
-
-  .clear-cache {
-    width: 100%;
-    margin-left: 0
   }
 
   .pagination {
