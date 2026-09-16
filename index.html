@@ -7,9 +7,9 @@
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-src 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self'; trusted-types 'none'; require-trusted-types-for 'script'">
     <meta name="referrer" content="no-referrer">
-    <meta name="theme-color" content="#075985">
+    <meta name="theme-color" content="#e4f3fb">
     <title>Sổ nước • Quản lý nước sinh hoạt</title>
-    <link rel="stylesheet" href="style.css?v=20260915-4">
+    <link rel="stylesheet" href="style.css?v=20260916-mist">
     <script src="app.js?v=20260915-4" defer></script>
 </head>
 
@@ -55,6 +55,7 @@
                 <h1>Từng giọt nước.<br><em>Đều rõ ràng.</em></h1>
                 <p>Quản lý chỉ số đồng hồ và lượng nước sử dụng của 200 hộ dân.</p>
             </div>
+            <div class="water-art" aria-hidden="true"></div>
             <div class="actions">
                 <button id="print" class="print-action"><span>▣</span> In sổ tháng</button>
                 <button id="excel" class="desktop-action"><span>↓</span> Xuất Excel</button>
@@ -73,6 +74,7 @@
             <div><strong>Sổ nước của bạn, luôn trong tầm tay</strong>
                 <p>Theo dõi chỉ số, lượng nước và công nợ trong cùng một nơi.</p>
             </div>
+            <a class="notice-link" href="#water-register">Đến sổ ghi nước ↗</a>
         </section>
         <section class="stats">
             <article data-icon="⌂"><span>Tổng số hộ dân</span><strong>200 <small>hộ</small></strong>
@@ -85,13 +87,32 @@
                 <p id="total-note">Trong tháng đang chọn</p>
             </article>
         </section>
-        <section class="panel">
+        <section class="panel" id="water-register" tabindex="-1">
             <div class="panel-heading">
                 <div>
                     <p class="section-kicker">DANH SÁCH HỘ DÂN</p>
                     <h2>Sổ ghi chỉ số nước</h2>
                     <p>Chọn tháng để xem, nhập hoặc cập nhật chỉ số cho từng hộ dân.</p>
-                </div><label class="month-label">Tháng ghi nước<input type="month" id="month" required></label>
+                </div>
+                <div class="month-label">
+                    <span>Tháng ghi nước</span>
+                    <div class="month-switcher">
+                        <button type="button" id="month-previous" class="month-step" aria-label="Xem tháng trước">‹</button>
+                        <button type="button" id="month-trigger" class="month-trigger" aria-haspopup="dialog"
+                            aria-expanded="false"><span id="month-display">Tháng -- / ----</span><span aria-hidden="true">▾</span></button>
+                        <button type="button" id="month-next" class="month-step" aria-label="Xem tháng sau">›</button>
+                    </div>
+                    <input type="hidden" id="month" required>
+                    <div id="month-picker" class="month-picker" role="dialog" aria-label="Chọn tháng" hidden>
+                        <div class="month-picker-head">
+                            <button type="button" id="year-previous" aria-label="Năm trước">‹</button>
+                            <strong id="picker-year"></strong>
+                            <button type="button" id="year-next" aria-label="Năm sau">›</button>
+                        </div>
+                        <div id="month-grid" class="month-grid"></div>
+                        <button type="button" id="month-today" class="month-today">Về tháng hiện tại</button>
+                    </div>
+                </div>
             </div>
             <div class="toolbar"><label class="search"><span>⌕</span><input id="search" type="search"
                         placeholder="Tìm số hộ dân…" aria-label="Tìm số hộ dân"></label><select id="filter"
@@ -122,7 +143,7 @@
             <div class="panel-footer"><span>Tiêu thụ là tổng cả kỳ, không chia đều từng tháng. Tổng phía trên chỉ cộng
                     kỳ kết thúc trong tháng đang xem.</span><span>Đơn vị: mét khối (m³)</span></div>
         </section>
-        <footer>Sổ nước <span>•</span> Dữ liệu lưu tập trung trong MySQL và dùng chung trên các thiết bị.</footer>
+        <footer>Sổ nước <span>•</span> Một nơi ghi chép, an tâm mỗi tháng.</footer>
     </main>
     <section id="print-report" class="print-report" aria-hidden="true">
         <header class="print-report-header">

@@ -327,6 +327,53 @@ if (typeof document !== 'undefined') {
     if (event.target.closest('button')) moreActions.open = false;
   });
   const now = new Date(); $('month').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  let pickerYear = now.getFullYear();
+  const monthNames = Array.from({ length: 12 }, (_, index) => `Tháng ${index + 1}`);
+  function updateMonthDisplay() {
+    const [year, month] = $('month').value.split('-');
+    $('month-display').textContent = `Tháng ${month} / ${year}`;
+  }
+  function renderMonthPicker() {
+    $('picker-year').textContent = pickerYear;
+    const currentValue = $('month').value;
+    const todayValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    $('month-grid').replaceChildren(...monthNames.map((name, index) => {
+      const button = document.createElement('button');
+      const value = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
+      button.type = 'button'; button.textContent = name; button.dataset.monthValue = value;
+      button.classList.toggle('is-selected', value === currentValue);
+      button.classList.toggle('is-current', value === todayValue);
+      button.setAttribute('aria-pressed', String(value === currentValue));
+      return button;
+    }));
+  }
+  function closeMonthPicker() {
+    $('month-picker').hidden = true;
+    $('month-trigger').setAttribute('aria-expanded', 'false');
+  }
+  function selectMonth(value) {
+    if (!monthValid(value)) return;
+    $('month').value = value; updateMonthDisplay(); closeMonthPicker();
+    $('month').dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function shiftSelectedMonth(offset) {
+    selectMonth(offset < 0 ? previousMonth($('month').value) : nextMonth($('month').value));
+  }
+  updateMonthDisplay();
+  $('month-trigger').addEventListener('click', () => {
+    const opening = $('month-picker').hidden;
+    if (!opening) { closeMonthPicker(); return; }
+    pickerYear = Number($('month').value.slice(0, 4)); renderMonthPicker();
+    $('month-picker').hidden = false; $('month-trigger').setAttribute('aria-expanded', 'true');
+  });
+  $('month-previous').addEventListener('click', () => shiftSelectedMonth(-1));
+  $('month-next').addEventListener('click', () => shiftSelectedMonth(1));
+  $('year-previous').addEventListener('click', () => { pickerYear--; renderMonthPicker(); });
+  $('year-next').addEventListener('click', () => { pickerYear++; renderMonthPicker(); });
+  $('month-grid').addEventListener('click', event => { const button = event.target.closest('[data-month-value]'); if (button) selectMonth(button.dataset.monthValue); });
+  $('month-today').addEventListener('click', () => selectMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`));
+  document.addEventListener('click', event => { if (!$('month-picker').hidden && !event.target.closest('.month-label')) closeMonthPicker(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('month-picker').hidden) { closeMonthPicker(); $('month-trigger').focus(); } });
   function checkExpiry() { return false; }
   function householdName(id) { return state.households[id]?.name ?? `Hộ dân ${String(id).padStart(3, '0')}`; }
   function openHouseholdEditor(mode, id = null) {
